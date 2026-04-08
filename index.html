@@ -2,7 +2,14 @@
 <html lang="fr">
 <head>
 <meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
+<meta name="apple-mobile-web-app-title" content="Suivi Heures">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="theme-color" content="#7F77DD">
+<link rel="manifest" href="manifest.json">
+<link rel="apple-touch-icon" href="icon-192.png">
 <title>Suivi d'heures</title>
 <style>
 * { box-sizing: border-box; margin: 0; padding: 0; }
@@ -1321,6 +1328,15 @@ function switchTab(btn) {
 document.querySelectorAll('.nav-btn').forEach(btn => {
   btn.addEventListener('click', () => switchTab(btn));
 });
+
+// Enregistrement du Service Worker (PWA)
+if ('serviceWorker' in navigator) {
+  window.addEventListener('load', () => {
+    navigator.serviceWorker.register('/suivi-heures/sw.js')
+      .then(() => console.log('Service Worker enregistré'))
+      .catch(e => console.log('SW erreur:', e));
+  });
+}
 </script>
 </body>
 </html>
