@@ -1112,38 +1112,6 @@ document.getElementById('export-csv').addEventListener('click', async () => {
       rows.push(['', '', '', '', '', '', '', '']);
     }
 
-    // Ajouter les congés validés
-    const congesSnap = await db.collection('conges').where('status', '==', 'approved').get();
-    const congesByEmp = {};
-    congesSnap.docs.forEach(d => {
-      const c = d.data();
-      if (!congesByEmp[c.userName]) congesByEmp[c.userName] = [];
-      congesByEmp[c.userName].push(c);
-    });
-
-    if (congesSnap.size > 0) {
-      rows.push(['', '', '', '', '', '', '', '']);
-      rows.push(['=== ABSENCES ET CONGES VALIDES ===', '', '', '', '', '', '', '']);
-      rows.push(['Salarie', 'Type', 'Date', '', '', 'Jours ouvres', '', 'Commentaire']);
-      Object.keys(congesByEmp).sort().forEach(empName => {
-        congesByEmp[empName].forEach(c => {
-          const typeLabel = { cp: 'Conges payes', rtt: 'RTT', maladie: 'Maladie', autre: 'Autre' }[c.type];
-          const startFr = new Date(c.start).toLocaleDateString('fr-FR');
-          const endFr = new Date(c.end).toLocaleDateString('fr-FR');
-          // Une ligne par jour ouvre
-          const cur = new Date(c.start);
-          const end = new Date(c.end);
-          while (cur <= end) {
-            const wd = cur.getDay();
-            if (wd !== 0 && wd !== 6) {
-              rows.push([empName, typeLabel, cur.toLocaleDateString('fr-FR'), '', '', '1', '', c.comment || '']);
-            }
-            cur.setDate(cur.getDate() + 1);
-          }
-        });
-      });
-    }
-
     // Ajouter les congés validés — une ligne par jour ouvré
     const congesSnap = await db.collection('conges').where('status', '==', 'approved').get();
     if (!congesSnap.empty) {
