@@ -1,0 +1,1518 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Suivi d'heures</title>
+<style>
+* { box-sizing: border-box; margin: 0; padding: 0; }
+body { font-family: system-ui, -apple-system, sans-serif; background: #f4f4f8; min-height: 100vh; }
+.app { max-width: 600px; margin: 0 auto; padding: 1.5rem 1rem; }
+
+.screen { display: none; }
+.screen.active { display: block; }
+
+.auth-card { background: #fff; border-radius: 16px; padding: 2rem; box-shadow: 0 2px 12px rgba(0,0,0,0.08); }
+.auth-logo { text-align: center; margin-bottom: 1.5rem; }
+.auth-logo-icon { font-size: 48px; display: block; margin-bottom: 8px; }
+.auth-logo-title { font-size: 22px; font-weight: 600; color: #111; }
+.auth-logo-sub { font-size: 14px; color: #888; margin-top: 4px; }
+
+input[type=text], input[type=email], input[type=password], select {
+  width: 100%; padding: 11px 14px; border: 1px solid #ddd; border-radius: 10px;
+  font-size: 14px; font-family: inherit; margin-bottom: 10px;
+  background: #fafafa; color: #111; transition: border 0.15s;
+}
+input:focus, select:focus { outline: none; border-color: #7F77DD; background: #fff; }
+
+.btn-primary { width: 100%; padding: 12px; background: #7F77DD; border: none; border-radius: 10px; color: #fff; font-size: 15px; font-weight: 600; cursor: pointer; font-family: inherit; transition: background 0.15s; }
+.btn-primary:hover { background: #534AB7; }
+.btn-secondary { width: 100%; padding: 11px; background: none; border: 1.5px solid #7F77DD; border-radius: 10px; color: #7F77DD; font-size: 14px; font-weight: 500; cursor: pointer; font-family: inherit; margin-top: 8px; transition: background 0.15s; }
+.btn-secondary:hover { background: #EEEDFE; }
+.btn-sm { padding: 5px 12px; border-radius: 8px; font-size: 12px; font-weight: 500; cursor: pointer; font-family: inherit; border: none; transition: all 0.15s; }
+.btn-danger { background: #FDEAEA; color: #A32D2D; }
+.btn-danger:hover { background: #f7c1c1; }
+.btn-edit { background: #EEEDFE; color: #534AB7; }
+.btn-edit:hover { background: #CECBF6; }
+.btn-csv { background: #E1F5EE; color: #0F6E56; border: none; padding: 8px 16px; border-radius: 8px; font-size: 13px; font-weight: 500; cursor: pointer; font-family: inherit; }
+.btn-csv:hover { background: #9FE1CB; }
+
+.link-btn { font-size: 13px; color: #7F77DD; cursor: pointer; margin-top: 14px; display: block; text-align: center; background: none; border: none; font-family: inherit; width: 100%; text-decoration: underline; }
+.error { font-size: 13px; color: #E24B4A; margin-bottom: 8px; min-height: 18px; }
+.radio-grp { display: flex; gap: 20px; margin-bottom: 12px; padding: 4px 0; }
+.radio-lbl { display: flex; align-items: center; gap: 7px; font-size: 14px; color: #333; cursor: pointer; }
+
+.userbar { display: flex; justify-content: space-between; align-items: center; background: #fff; border-radius: 12px; padding: 10px 14px; margin-bottom: 14px; box-shadow: 0 1px 4px rgba(0,0,0,0.06); }
+.userbar-name { font-size: 13px; color: #555; display: flex; align-items: center; gap: 7px; }
+.syncdot { width: 9px; height: 9px; border-radius: 50%; background: #1D9E75; flex-shrink: 0; }
+.admin-badge { background: #EEEDFE; color: #534AB7; font-size: 11px; font-weight: 600; padding: 2px 8px; border-radius: 10px; }
+.logout { font-size: 12px; color: #E24B4A; background: none; border: none; cursor: pointer; font-family: inherit; font-weight: 500; }
+
+.nav { display: flex; background: #fff; border-radius: 12px; padding: 4px; margin-bottom: 14px; box-shadow: 0 1px 4px rgba(0,0,0,0.06); flex-wrap: wrap; gap: 2px; }
+.nav-btn { flex: 1; padding: 9px 4px; background: none; border: none; border-radius: 9px; cursor: pointer; font-size: 13px; color: #888; font-family: inherit; transition: all 0.15s; white-space: nowrap; }
+.nav-btn.active { background: #7F77DD; color: #fff; font-weight: 500; }
+.nav-btn.admin-tab { color: #534AB7; }
+.nav-btn.admin-tab.active { background: #534AB7; color: #fff; }
+
+.tab { display: none; }
+.tab.active { display: block; }
+
+.card { background: #fff; border-radius: 14px; padding: 1.25rem; margin-bottom: 14px; box-shadow: 0 1px 4px rgba(0,0,0,0.06); }
+.card-title { font-size: 11px; color: #aaa; margin-bottom: 12px; text-transform: uppercase; letter-spacing: 0.6px; font-weight: 600; }
+.card-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px; }
+.card-header .card-title { margin-bottom: 0; }
+
+.badge-center { text-align: center; padding: 1.5rem 0 1rem; }
+.badge-btn { width: 150px; height: 150px; border-radius: 50%; border: 3px solid #ddd; background: #f5f5f5; cursor: pointer; font-size: 15px; font-weight: 600; color: #333; font-family: inherit; display: inline-flex; flex-direction: column; align-items: center; justify-content: center; gap: 7px; transition: all 0.2s; box-shadow: 0 4px 16px rgba(0,0,0,0.08); }
+.badge-btn:hover { transform: scale(1.03); }
+.badge-btn.active { border-color: #1D9E75; background: #E1F5EE; color: #0F6E56; box-shadow: 0 4px 20px rgba(29,158,117,0.2); }
+.badge-icon { font-size: 32px; }
+.timer { font-size: 36px; font-weight: 700; margin: 1.2rem 0 0.3rem; letter-spacing: 2px; color: #111; }
+.status-lbl { font-size: 13px; color: #888; margin-bottom: 1.2rem; }
+.geo-btn { display: inline-flex; align-items: center; gap: 6px; padding: 8px 16px; background: none; border: 1px solid #ddd; border-radius: 20px; cursor: pointer; font-size: 12px; color: #666; font-family: inherit; margin-bottom: 8px; }
+.geo-btn:hover { background: #f0f0f0; }
+.geo-txt { font-size: 12px; color: #aaa; min-height: 18px; text-align: center; }
+
+.week-grid { display: grid; grid-template-columns: repeat(5, 1fr); gap: 8px; }
+.day-cell { text-align: center; }
+.day-lbl { font-size: 11px; color: #aaa; margin-bottom: 5px; font-weight: 500; }
+.day-bar-wrap { height: 50px; background: #f0f0f0; border-radius: 6px; display: flex; flex-direction: column; justify-content: flex-end; overflow: hidden; }
+.day-bar { background: #7F77DD; border-radius: 6px; transition: height 0.4s; }
+.day-h { font-size: 11px; color: #777; margin-top: 4px; font-weight: 500; }
+
+.h-item { display: flex; justify-content: space-between; align-items: center; padding: 11px 0; border-bottom: 1px solid #f5f5f5; }
+.h-item:last-child { border-bottom: none; }
+.h-dot { width: 9px; height: 9px; border-radius: 50%; display: inline-block; margin-right: 5px; flex-shrink: 0; }
+.dot-in { background: #1D9E75; }
+.dot-out { background: #E24B4A; }
+.h-main { font-size: 13px; font-weight: 500; color: #222; display: flex; align-items: center; flex-wrap: wrap; gap: 2px; }
+.h-dur { background: #EEEDFE; color: #534AB7; font-size: 11px; padding: 2px 7px; border-radius: 10px; margin-left: 6px; font-weight: 500; }
+.h-sub { font-size: 11px; color: #bbb; margin-top: 3px; }
+.h-date { font-size: 12px; color: #aaa; text-align: right; white-space: nowrap; margin-left: 8px; }
+.empty-state { text-align: center; padding: 2rem; color: #bbb; font-size: 14px; }
+
+.team-row { display: flex; align-items: center; gap: 12px; padding: 11px 0; border-bottom: 1px solid #f5f5f5; }
+.team-row:last-child { border-bottom: none; }
+.avatar { width: 40px; height: 40px; border-radius: 50%; background: #EEEDFE; display: flex; align-items: center; justify-content: center; font-size: 13px; font-weight: 600; color: #534AB7; flex-shrink: 0; }
+.avatar.inactive { background: #f0f0f0; color: #aaa; }
+.emp-name { font-size: 14px; font-weight: 500; color: #222; }
+.emp-sub { font-size: 11px; color: #999; margin-top: 3px; }
+.sbadge { padding: 4px 10px; border-radius: 20px; font-size: 11px; font-weight: 600; white-space: nowrap; }
+.s-present { background: #E1F5EE; color: #0F6E56; }
+.s-absent { background: #f0f0f0; color: #888; }
+.s-disabled { background: #FDEAEA; color: #A32D2D; }
+
+.stats-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+.stat-box { background: #f7f7fb; border-radius: 10px; padding: 14px; }
+.stat-val { font-size: 24px; font-weight: 700; color: #7F77DD; }
+.stat-lbl { font-size: 12px; color: #999; margin-top: 3px; }
+
+/* Admin styles */
+.admin-stats { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; margin-bottom: 14px; }
+.admin-stat { background: #fff; border-radius: 12px; padding: 14px; box-shadow: 0 1px 4px rgba(0,0,0,0.06); text-align: center; }
+.admin-stat-val { font-size: 28px; font-weight: 700; color: #7F77DD; }
+.admin-stat-lbl { font-size: 11px; color: #aaa; margin-top: 3px; text-transform: uppercase; letter-spacing: 0.4px; }
+
+.filter-bar { display: flex; gap: 8px; margin-bottom: 12px; flex-wrap: wrap; }
+.filter-bar input, .filter-bar select { margin-bottom: 0; flex: 1; min-width: 120px; }
+
+.admin-row { display: flex; align-items: center; gap: 10px; padding: 10px 0; border-bottom: 1px solid #f5f5f5; }
+.admin-row:last-child { border-bottom: none; }
+.admin-row-info { flex: 1; min-width: 0; }
+.admin-row-actions { display: flex; gap: 6px; flex-shrink: 0; }
+
+.pointage-row { display: flex; align-items: center; gap: 8px; padding: 9px 0; border-bottom: 1px solid #f5f5f5; font-size: 13px; }
+.pointage-row:last-child { border-bottom: none; }
+.pointage-info { flex: 1; min-width: 0; }
+.pointage-name { font-weight: 500; color: #222; }
+.pointage-detail { font-size: 11px; color: #999; margin-top: 2px; }
+
+/* Modal */
+.modal-overlay { position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(0,0,0,0.4); display: flex; align-items: center; justify-content: center; z-index: 1000; padding: 1rem; }
+.modal { background: #fff; border-radius: 16px; padding: 1.5rem; width: 100%; max-width: 400px; box-shadow: 0 8px 32px rgba(0,0,0,0.15); }
+.modal h3 { font-size: 16px; font-weight: 600; color: #111; margin-bottom: 1rem; }
+.modal-actions { display: flex; gap: 8px; margin-top: 1rem; }
+.modal-actions button { flex: 1; }
+
+.loader { text-align: center; padding: 2rem; color: #bbb; font-size: 14px; }
+.section-sep { height: 1px; background: #f0f0f0; margin: 4px 0 12px; }
+
+/* Congés */
+.conge-row { display: flex; align-items: center; gap: 10px; padding: 11px 0; border-bottom: 1px solid #f5f5f5; }
+.conge-row:last-child { border-bottom: none; }
+.conge-type { padding: 3px 10px; border-radius: 20px; font-size: 11px; font-weight: 600; white-space: nowrap; flex-shrink: 0; }
+.conge-cp { background: #E1F5EE; color: #0F6E56; }
+.conge-rtt { background: #EEEDFE; color: #534AB7; }
+.conge-mal { background: #FAEEDA; color: #854F0B; }
+.conge-autre { background: #f0f0f0; color: #666; }
+.conge-status { padding: 3px 10px; border-radius: 20px; font-size: 11px; font-weight: 600; flex-shrink: 0; }
+.cs-pending { background: #FAEEDA; color: #854F0B; }
+.cs-approved { background: #E1F5EE; color: #0F6E56; }
+.cs-refused { background: #FDEAEA; color: #A32D2D; }
+.notif-dot { width: 8px; height: 8px; border-radius: 50%; background: #E24B4A; display: inline-block; margin-left: 4px; vertical-align: middle; }
+</style>
+</head>
+<body>
+<div class="app">
+
+  <div id="s-loading" class="screen active">
+    <div class="loader" style="margin-top:3rem;">⏳ Connexion à Firebase...</div>
+  </div>
+
+  <div id="s-login" class="screen">
+    <div class="auth-card">
+      <div class="auth-logo">
+        <span class="auth-logo-icon">⏱</span>
+        <div class="auth-logo-title">Suivi d'heures</div>
+        <div class="auth-logo-sub">Connectez-vous pour accéder à l'application</div>
+      </div>
+      <input type="email" id="l-email" placeholder="Adresse email" />
+      <input type="password" id="l-pass" placeholder="Mot de passe" />
+      <div class="error" id="l-err"></div>
+      <button class="btn-primary" id="l-btn">Se connecter</button>
+      <button class="link-btn" id="l-toggle">Pas encore de compte ? Créer un compte</button>
+    </div>
+  </div>
+
+  <div id="s-register" class="screen">
+    <div class="auth-card">
+      <div class="auth-logo">
+        <span class="auth-logo-icon">👤</span>
+        <div class="auth-logo-title">Créer un compte</div>
+        <div class="auth-logo-sub">Rejoignez votre équipe</div>
+      </div>
+      <input type="text" id="r-name" placeholder="Nom complet" />
+      <input type="email" id="r-email" placeholder="Adresse email" />
+      <input type="password" id="r-pass" placeholder="Mot de passe (min. 6 caractères)" />
+      <div class="radio-grp">
+        <label class="radio-lbl"><input type="radio" name="rteam" value="sedentaire" checked /> Sédentaire</label>
+        <label class="radio-lbl"><input type="radio" name="rteam" value="itinerant" /> Itinérant</label>
+      </div>
+      <div class="error" id="r-err"></div>
+      <button class="btn-primary" id="r-btn">Créer mon compte</button>
+      <button class="link-btn" id="r-toggle">Déjà un compte ? Se connecter</button>
+    </div>
+  </div>
+
+  <div id="s-app" class="screen">
+    <div class="userbar">
+      <div class="userbar-name">
+        <span class="syncdot"></span>
+        <span id="u-name">...</span>
+        <span class="admin-badge" id="admin-badge" style="display:none">Admin</span>
+      </div>
+      <button class="logout" id="u-logout">Déconnexion</button>
+    </div>
+
+    <nav class="nav" id="main-nav">
+      <button class="nav-btn active" data-tab="badge">Badgeage</button>
+      <button class="nav-btn" data-tab="history">Historique</button>
+      <button class="nav-btn" data-tab="manager">Équipe</button>
+      <button class="nav-btn" data-tab="profile">Profil</button>
+    </nav>
+
+    <!-- Badgeage -->
+    <div id="tab-badge" class="tab active">
+      <div class="badge-center">
+        <button class="badge-btn" id="badge-btn">
+          <span class="badge-icon" id="badge-icon">▶</span>
+          <span id="badge-lbl">Pointer arrivée</span>
+        </button>
+        <div class="timer" id="timer">00:00:00</div>
+        <div class="status-lbl" id="status-lbl">Non pointé aujourd'hui</div>
+        <button class="geo-btn" id="geo-btn">📍 Me localiser</button>
+        <div class="geo-txt" id="geo-txt"></div>
+      </div>
+      <div class="card">
+        <div class="card-title">Semaine en cours</div>
+        <div class="week-grid" id="week-grid"></div>
+      </div>
+    </div>
+
+    <!-- Historique -->
+    <div id="tab-history" class="tab">
+      <div class="card" id="hist-list"><div class="loader">Chargement...</div></div>
+    </div>
+
+    <!-- Équipe -->
+    <div id="tab-manager" class="tab">
+      <div class="card">
+        <div class="card-title">Équipe — statut en temps réel</div>
+        <div id="team-list"><div class="loader">Chargement...</div></div>
+      </div>
+    </div>
+
+    <!-- Profil -->
+    <div id="tab-profile" class="tab">
+      <div class="card">
+        <div class="card-title">Mon profil</div>
+        <input type="text" id="p-name" placeholder="Nom complet" />
+        <div class="radio-grp">
+          <label class="radio-lbl"><input type="radio" name="pteam" value="sedentaire" checked /> Sédentaire</label>
+          <label class="radio-lbl"><input type="radio" name="pteam" value="itinerant" /> Itinérant</label>
+        </div>
+        <button class="btn-secondary" id="p-save">Enregistrer le profil</button>
+      </div>
+      <div class="card">
+        <div class="card-title">Mes statistiques</div>
+        <div class="stats-grid">
+          <div class="stat-box"><div class="stat-val" id="st-week">0h</div><div class="stat-lbl">Cette semaine</div></div>
+          <div class="stat-box"><div class="stat-val" id="st-month">0h</div><div class="stat-lbl">Ce mois</div></div>
+          <div class="stat-box"><div class="stat-val" id="st-days">0</div><div class="stat-lbl">Jours travaillés</div></div>
+          <div class="stat-box"><div class="stat-val" id="st-avg">0h</div><div class="stat-lbl">Moy. journalière</div></div>
+        </div>
+      </div>
+      <div class="card">
+        <div class="card-title">Suivi par semaine</div>
+        <div id="weekly-recap"><div class="loader">Chargement...</div></div>
+      </div>
+    </div>
+
+    <!-- Admin : Vue d'ensemble -->
+    <div id="tab-admin-overview" class="tab">
+      <div class="admin-stats">
+        <div class="admin-stat"><div class="admin-stat-val" id="a-total">0</div><div class="admin-stat-lbl">Employés</div></div>
+        <div class="admin-stat"><div class="admin-stat-val" id="a-present">0</div><div class="admin-stat-lbl">Présents</div></div>
+        <div class="admin-stat"><div class="admin-stat-val" id="a-hours">0h</div><div class="admin-stat-lbl">Heures ce mois</div></div>
+      </div>
+      <div class="card">
+        <div class="card-header">
+          <div class="card-title">Tous les pointages</div>
+          <button class="btn-csv" id="export-csv">⬇ Exporter CSV</button>
+        </div>
+        <div class="filter-bar">
+          <input type="text" id="f-search" placeholder="Rechercher un employé..." style="margin-bottom:0" />
+          <input type="date" id="f-date-from" style="margin-bottom:0" />
+          <input type="date" id="f-date-to" style="margin-bottom:0" />
+        </div>
+        <div id="all-pointages"><div class="loader">Chargement...</div></div>
+      </div>
+    </div>
+
+    <!-- Admin : Employés -->
+    <div id="tab-admin-employees" class="tab">
+      <div class="card">
+        <div class="card-header">
+          <div class="card-title">Gestion des employés</div>
+        </div>
+        <div id="employees-list"><div class="loader">Chargement...</div></div>
+      </div>
+    </div>
+
+    <!-- Congés salarié -->
+    <div id="tab-conges" class="tab">
+      <div class="card">
+        <div class="card-header">
+          <div class="card-title">Mes demandes de congés</div>
+          <button class="btn-csv" style="background:#EEEDFE;color:#534AB7;" onclick="openCongeModal()">+ Nouvelle demande</button>
+        </div>
+        <div id="my-conges"><div class="loader">Chargement...</div></div>
+      </div>
+    </div>
+
+    <!-- Admin : Congés -->
+    <div id="tab-admin-conges" class="tab">
+      <div class="card">
+        <div class="card-header">
+          <div class="card-title">Demandes de congés</div>
+          <span id="pending-count" style="font-size:12px;color:#854F0B;background:#FAEEDA;padding:3px 10px;border-radius:20px;font-weight:600;display:none;"></span>
+        </div>
+        <div id="all-conges"><div class="loader">Chargement...</div></div>
+      </div>
+    </div>
+
+  </div>
+
+  <!-- Modal édition pointage -->
+  <div class="modal-overlay" id="modal-edit" style="display:none">
+    <div class="modal">
+      <h3>Modifier le pointage</h3>
+      <label style="font-size:13px;color:#666;display:block;margin-bottom:4px">Heure d'arrivée</label>
+      <input type="datetime-local" id="edit-start" />
+      <label style="font-size:13px;color:#666;display:block;margin-bottom:4px">Heure de départ</label>
+      <input type="datetime-local" id="edit-end" />
+      <div class="modal-actions">
+        <button class="btn-secondary" onclick="closeModal()">Annuler</button>
+        <button class="btn-primary" id="modal-save">Enregistrer</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Modal confirmation suppression -->
+  <div class="modal-overlay" id="modal-delete" style="display:none">
+    <div class="modal">
+      <h3>Supprimer ce pointage ?</h3>
+      <p style="font-size:14px;color:#666;margin-bottom:1rem">Cette action est irréversible.</p>
+      <div class="modal-actions">
+        <button class="btn-secondary" onclick="closeModal()">Annuler</button>
+        <button class="btn-primary" style="background:#E24B4A" id="modal-confirm-delete">Supprimer</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Modal nouvelle demande de congé -->
+  <div class="modal-overlay" id="modal-conge" style="display:none">
+    <div class="modal">
+      <h3>Nouvelle demande d'absence</h3>
+      <label style="font-size:13px;color:#666;display:block;margin-bottom:4px">Type d'absence</label>
+      <select id="conge-type">
+        <option value="cp">Congés payés</option>
+        <option value="rtt">RTT</option>
+        <option value="maladie">Maladie</option>
+        <option value="autre">Autre</option>
+      </select>
+      <label style="font-size:13px;color:#666;display:block;margin-bottom:4px">Date de début</label>
+      <input type="date" id="conge-start" />
+      <label style="font-size:13px;color:#666;display:block;margin-bottom:4px">Date de fin</label>
+      <input type="date" id="conge-end" />
+      <label style="font-size:13px;color:#666;display:block;margin-bottom:4px">Commentaire (optionnel)</label>
+      <input type="text" id="conge-comment" placeholder="Ex: vacances d'été" />
+      <div class="error" id="conge-err"></div>
+      <div class="modal-actions">
+        <button class="btn-secondary" onclick="closeModal()">Annuler</button>
+        <button class="btn-primary" id="conge-save">Envoyer la demande</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Modal validation congé (admin) -->
+  <div class="modal-overlay" id="modal-conge-admin" style="display:none">
+    <div class="modal">
+      <h3 id="modal-conge-admin-title">Demande de congé</h3>
+      <div id="modal-conge-admin-body" style="font-size:14px;color:#555;margin-bottom:1rem;line-height:1.6;"></div>
+      <div class="modal-actions">
+        <button class="btn-secondary" onclick="closeModal()">Fermer</button>
+        <button class="btn-primary" style="background:#E24B4A;" id="conge-refuse">Refuser</button>
+        <button class="btn-primary" style="background:#1D9E75;" id="conge-approve">Valider</button>
+      </div>
+    </div>
+  </div>
+
+</div>
+
+<script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-auth-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-firestore-compat.js"></script>
+<script>
+// =============================================
+// CONFIGURATION
+// =============================================
+const ADMIN_EMAIL = "contact@ag-groupe.fr";
+
+const cfg = {
+  apiKey: "AIzaSyBejQIMds77GPMDs7VFCANH6q9CUjgWbZQ",
+  authDomain: "suivi-heures-agreno-def80.firebaseapp.com",
+  projectId: "suivi-heures-agreno-def80",
+  storageBucket: "suivi-heures-agreno-def80.firebasestorage.app",
+  messagingSenderId: "912622714840",
+  appId: "1:912622714840:web:4bf68140ea2d938715bcad"
+};
+
+firebase.initializeApp(cfg);
+const auth = firebase.auth();
+const db = firebase.firestore();
+
+let CU = null, UP = null, geo = null, timerInt = null, badgeTime = null, isBadged = false;
+let unsubHist = null, unsubTeam = null, unsubAllPointages = null, unsubEmployees = null;
+let isAdmin = false;
+let allPointagesData = [];
+let editDocId = null, deleteDocId = null;
+const DAYS = ['Lun','Mar','Mer','Jeu','Ven'];
+
+// =============================================
+// UTILS
+// =============================================
+function show(id) {
+  document.querySelectorAll('.screen').forEach(s => s.classList.remove('active'));
+  document.getElementById(id).classList.add('active');
+}
+function closeModal() {
+  document.getElementById('modal-edit').style.display = 'none';
+  document.getElementById('modal-delete').style.display = 'none';
+  document.getElementById('modal-conge').style.display = 'none';
+  document.getElementById('modal-conge-admin').style.display = 'none';
+}
+function toLocalDatetime(isoStr) {
+  const d = new Date(isoStr);
+  const pad = n => String(n).padStart(2,'0');
+  return `${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
+}
+
+// =============================================
+// AUTH
+// =============================================
+document.getElementById('l-toggle').addEventListener('click', () => show('s-register'));
+document.getElementById('r-toggle').addEventListener('click', () => show('s-login'));
+
+document.getElementById('l-btn').addEventListener('click', async () => {
+  const email = document.getElementById('l-email').value.trim();
+  const pass = document.getElementById('l-pass').value;
+  document.getElementById('l-err').textContent = '';
+  if (!email || !pass) { document.getElementById('l-err').textContent = 'Veuillez remplir tous les champs.'; return; }
+  try { await auth.signInWithEmailAndPassword(email, pass); }
+  catch(e) { document.getElementById('l-err').textContent = 'Email ou mot de passe incorrect.'; }
+});
+
+document.getElementById('r-btn').addEventListener('click', async () => {
+  const name = document.getElementById('r-name').value.trim();
+  const email = document.getElementById('r-email').value.trim();
+  const pass = document.getElementById('r-pass').value;
+  const team = document.querySelector('input[name="rteam"]:checked').value;
+  document.getElementById('r-err').textContent = '';
+  if (!name) { document.getElementById('r-err').textContent = 'Veuillez entrer votre nom.'; return; }
+  if (!email) { document.getElementById('r-err').textContent = 'Veuillez entrer votre email.'; return; }
+  if (pass.length < 6) { document.getElementById('r-err').textContent = 'Mot de passe trop court (min. 6 caractères).'; return; }
+  try {
+    const cred = await auth.createUserWithEmailAndPassword(email, pass);
+    await db.collection('users').doc(cred.user.uid).set({ name, email, team, active: true, createdAt: new Date().toISOString() });
+  } catch(e) {
+    document.getElementById('r-err').textContent = e.code === 'auth/email-already-in-use' ? 'Cet email est déjà utilisé.' : 'Erreur : ' + e.message;
+  }
+});
+
+document.getElementById('u-logout').addEventListener('click', async () => {
+  [unsubHist, unsubTeam, unsubAllPointages, unsubEmployees, unsubMyConges, unsubAllConges].forEach(u => u && u());
+  clearInterval(timerInt);
+  isBadged = false; badgeTime = null;
+  await auth.signOut();
+});
+
+auth.onAuthStateChanged(async user => {
+  if (user) {
+    CU = user;
+    isAdmin = ADMIN_EMAIL && user.email === ADMIN_EMAIL;
+    show('s-app');
+    if (isAdmin) {
+      document.getElementById('admin-badge').style.display = 'inline';
+      addAdminTabs();
+    }
+    await loadProfile();
+    await checkBadge();
+    listenHistory();
+    listenTeam();
+    renderWeek();
+    renderStats();
+    addCongesTabToNav();
+    if (isAdmin) {
+      listenAllPointages();
+      listenEmployees();
+      updateAdminStats();
+    }
+  } else {
+    CU = null; UP = null; isAdmin = false;
+    show('s-login');
+  }
+});
+
+function addCongesTabToNav() {
+  const nav = document.getElementById('main-nav');
+  if (nav.querySelector('[data-tab="conges"]')) return;
+  const tc = document.createElement('button');
+  tc.className = 'nav-btn'; tc.dataset.tab = 'conges'; tc.textContent = '🗓 Congés';
+  nav.appendChild(tc);
+  tc.addEventListener('click', () => switchTab(tc));
+}
+
+function addAdminTabs() {
+  const nav = document.getElementById('main-nav');
+  if (nav.querySelector('[data-tab="admin-overview"]')) return;
+  const t1 = document.createElement('button');
+  t1.className = 'nav-btn admin-tab'; t1.dataset.tab = 'admin-overview'; t1.textContent = '📊 Pointages';
+  const t2 = document.createElement('button');
+  t2.className = 'nav-btn admin-tab'; t2.dataset.tab = 'admin-employees'; t2.textContent = '👥 Employés';
+  const t3 = document.createElement('button');
+  t3.className = 'nav-btn admin-tab'; t3.dataset.tab = 'admin-conges'; t3.id = 'tab-btn-admin-conges'; t3.textContent = '🗓 Congés';
+  nav.appendChild(t1); nav.appendChild(t2); nav.appendChild(t3);
+  [t1, t2, t3].forEach(btn => btn.addEventListener('click', () => switchTab(btn)));
+}
+
+// =============================================
+// PROFIL
+// =============================================
+async function loadProfile() {
+  try {
+    const snap = await db.collection('users').doc(CU.uid).get();
+    if (snap.exists) {
+      UP = snap.data();
+      document.getElementById('u-name').textContent = UP.name || CU.email;
+      document.getElementById('p-name').value = UP.name || '';
+      document.querySelectorAll('input[name="pteam"]').forEach(r => r.checked = r.value === (UP.team || 'sedentaire'));
+    }
+  } catch(e) { console.error(e); }
+}
+
+document.getElementById('p-save').addEventListener('click', async () => {
+  const name = document.getElementById('p-name').value.trim();
+  const team = document.querySelector('input[name="pteam"]:checked').value;
+  try {
+    await db.collection('users').doc(CU.uid).set({ name, team }, { merge: true });
+    UP = { ...UP, name, team };
+    document.getElementById('u-name').textContent = name || CU.email;
+    const btn = document.getElementById('p-save');
+    btn.textContent = '✓ Profil enregistré !';
+    setTimeout(() => btn.textContent = 'Enregistrer le profil', 2500);
+  } catch(e) { alert('Erreur lors de la sauvegarde.'); }
+});
+
+// =============================================
+// BADGEAGE
+// =============================================
+async function checkBadge() {
+  try {
+    const snap = await db.collection('badges').doc(CU.uid).get();
+    if (snap.exists && snap.data().active) {
+      isBadged = true; badgeTime = snap.data().startTime;
+      startTimer(); updateBadgeUI(true);
+    }
+  } catch(e) { console.error(e); }
+}
+
+document.getElementById('badge-btn').addEventListener('click', async () => {
+  const now = new Date();
+  const isItinerant = UP?.team === 'itinerant';
+
+  // Bloquer si itinérant sans géolocalisation
+  if (!isBadged && isItinerant && !geo) {
+    const geoErr = document.getElementById('geo-txt');
+    geoErr.style.color = '#E24B4A';
+    geoErr.style.fontWeight = '500';
+    geoErr.textContent = '⚠ Veuillez cliquer sur "Me localiser" avant de pointer';
+    document.getElementById('geo-btn').style.borderColor = '#E24B4A';
+    document.getElementById('geo-btn').style.color = '#E24B4A';
+    return;
+  }
+
+  if (!isBadged) {
+    isBadged = true; badgeTime = now.toISOString();
+    try {
+      await db.collection('badges').doc(CU.uid).set({
+        active: true, startTime: badgeTime,
+        userId: CU.uid, userName: UP?.name || CU.email,
+        team: UP?.team || 'sedentaire', geo: geo || null
+      });
+      startTimer(); updateBadgeUI(true);
+    } catch(e) { isBadged = false; badgeTime = null; alert('Erreur de connexion.'); }
+  } else {
+    // Pour le départ d'un itinérant, rafraîchir la position
+    if (isItinerant && geo) {
+      await new Promise(resolve => {
+        navigator.geolocation.getCurrentPosition(
+          p => { geo = {lat: p.coords.latitude.toFixed(5), lng: p.coords.longitude.toFixed(5)}; resolve(); },
+          () => resolve()
+        );
+      });
+    }
+    const dur = (now - new Date(badgeTime)) / 3600000;
+    try {
+      await db.collection('pointages').add({
+        userId: CU.uid, userName: UP?.name || CU.email,
+        startTime: badgeTime, endTime: now.toISOString(),
+        duration: dur, geo: geo || null,
+        team: UP?.team || 'sedentaire',
+        date: now.toISOString().split('T')[0]
+      });
+      await db.collection('badges').doc(CU.uid).set({ active: false, userId: CU.uid });
+      isBadged = false; badgeTime = null; geo = null;
+      clearInterval(timerInt);
+      document.getElementById('timer').textContent = '00:00:00';
+      // Réinitialiser le bouton geo
+      const geoEl = document.getElementById('geo-txt');
+      geoEl.textContent = '';
+      geoEl.style.color = '';
+      geoEl.style.fontWeight = '';
+      document.getElementById('geo-btn').style.borderColor = '';
+      document.getElementById('geo-btn').style.color = '';
+      updateBadgeUI(false);
+      renderWeek(); renderStats();
+    } catch(e) { alert('Erreur lors de la sauvegarde.'); }
+  }
+});
+
+function startTimer() {
+  clearInterval(timerInt);
+  timerInt = setInterval(() => {
+    const d = Date.now() - new Date(badgeTime).getTime();
+    const h = Math.floor(d/3600000), m = Math.floor((d%3600000)/60000), s = Math.floor((d%60000)/1000);
+    document.getElementById('timer').textContent = String(h).padStart(2,'0')+':'+String(m).padStart(2,'0')+':'+String(s).padStart(2,'0');
+  }, 1000);
+}
+
+function updateBadgeUI(on) {
+  document.getElementById('badge-btn').classList.toggle('active', on);
+  document.getElementById('badge-icon').textContent = on ? '⏹' : '▶';
+  document.getElementById('badge-lbl').textContent = on ? 'Pointer départ' : 'Pointer arrivée';
+  document.getElementById('status-lbl').textContent = on
+    ? 'En service depuis ' + new Date(badgeTime).toLocaleTimeString('fr-FR',{hour:'2-digit',minute:'2-digit'})
+    : 'Session terminée';
+}
+
+document.getElementById('geo-btn').addEventListener('click', () => {
+  triggerGeo();
+});
+
+function triggerGeo() {
+  const el = document.getElementById('geo-txt');
+  const btn = document.getElementById('geo-btn');
+  if (!navigator.geolocation) { el.textContent = 'Géolocalisation non disponible sur cet appareil'; return; }
+  el.textContent = 'Localisation en cours...';
+  el.style.color = '#aaa';
+  el.style.fontWeight = '';
+  btn.style.borderColor = '';
+  btn.style.color = '';
+  navigator.geolocation.getCurrentPosition(
+    p => {
+      geo = {lat: p.coords.latitude.toFixed(5), lng: p.coords.longitude.toFixed(5)};
+      el.textContent = '✓ Position enregistrée';
+      el.style.color = '#1D9E75';
+      el.style.fontWeight = '500';
+      btn.style.borderColor = '#1D9E75';
+      btn.style.color = '#1D9E75';
+    },
+    () => {
+      el.textContent = "Impossible d'obtenir la position — vérifiez les autorisations";
+      el.style.color = '#E24B4A';
+    }
+  );
+}
+
+// =============================================
+// HISTORIQUE
+// =============================================
+function listenHistory() {
+  if (unsubHist) unsubHist();
+  const el = document.getElementById('hist-list');
+  el.innerHTML = '<div class="loader">Chargement...</div>';
+  unsubHist = db.collection('pointages')
+    .where('userId', '==', CU.uid)
+    .orderBy('endTime', 'desc')
+    .onSnapshot(snap => {
+      if (snap.empty) {
+        el.innerHTML = '<div class="empty-state">Aucun pointage enregistré.<br><small>Pointez une arrivée puis un départ pour voir l\'historique.</small></div>';
+        return;
+      }
+      el.innerHTML = snap.docs.slice(0,30).map(d => {
+        const e = d.data();
+        const end = new Date(e.endTime);
+        const dateStr = end.toLocaleDateString('fr-FR',{weekday:'short',day:'2-digit',month:'2-digit'});
+        const s = new Date(e.startTime).toLocaleTimeString('fr-FR',{hour:'2-digit',minute:'2-digit'});
+        const en = end.toLocaleTimeString('fr-FR',{hour:'2-digit',minute:'2-digit'});
+        const loc = e.geo ? '📍 '+e.geo.lat+', '+e.geo.lng : 'Position non enregistrée';
+        return `<div class="h-item">
+          <div style="flex:1">
+            <div class="h-main"><span class="h-dot dot-in"></span>${s}<span style="color:#ccc;margin:0 4px">→</span><span class="h-dot dot-out"></span>${en}<span class="h-dur">${e.duration.toFixed(1)}h</span></div>
+            <div class="h-sub">${loc}</div>
+          </div>
+          <div class="h-date">${dateStr}</div>
+        </div>`;
+      }).join('');
+    }, err => {
+      el.innerHTML = '<div class="empty-state" style="color:#E24B4A">Erreur : ' + err.message + '</div>';
+      console.error('Historique erreur:', err);
+    });
+}
+
+// =============================================
+// ÉQUIPE
+// =============================================
+function listenTeam() {
+  if (unsubTeam) unsubTeam();
+  try {
+    const q = isAdmin ? db.collection('badges') : db.collection('badges').where('userId', '==', CU.uid);
+    unsubTeam = q.onSnapshot(snap => {
+      const el = document.getElementById('team-list');
+      const members = snap.docs.map(d => d.data()).filter(d => d.userId);
+      if (!members.length) { el.innerHTML = '<div class="empty-state">Aucun statut enregistré</div>'; return; }
+      members.sort((a,b) => (b.active?1:0)-(a.active?1:0));
+      el.innerHTML = members.map(m => {
+        const name = m.userName || 'Inconnu';
+        const ini = name.split(' ').map(n=>n[0]).join('').toUpperCase().slice(0,2);
+        const since = m.startTime ? new Date(m.startTime).toLocaleTimeString('fr-FR',{hour:'2-digit',minute:'2-digit'}) : '';
+        return `<div class="team-row">
+          <div class="avatar ${m.active?'':'inactive'}">${ini}</div>
+          <div style="flex:1"><div class="emp-name">${name}</div><div class="emp-sub">${m.active?'⏱ Depuis '+since:'Absent'} · ${m.team==='itinerant'?'Itinérant':'Sédentaire'}</div></div>
+          <span class="sbadge ${m.active?'s-present':'s-absent'}">${m.active?'Présent':'Absent'}</span>
+        </div>`;
+      }).join('');
+    });
+  } catch(e) { console.error(e); }
+}
+
+// =============================================
+// SEMAINE & STATS
+// =============================================
+async function renderWeek() {
+  if (!CU) return;
+  try {
+    const now = new Date(), day = now.getDay()||7;
+    const mon = new Date(now); mon.setDate(now.getDate()-day+1); mon.setHours(0,0,0,0);
+    const snap = await db.collection('pointages').where('userId','==',CU.uid).where('endTime','>=',mon.toISOString()).get();
+    const hrs = [0,0,0,0,0];
+    snap.docs.forEach(d => { const e=d.data(), i=(new Date(e.endTime).getDay()||7)-1; if(i>=0&&i<5) hrs[i]+=e.duration; });
+    const mx = Math.max(...hrs,8);
+    document.getElementById('week-grid').innerHTML = DAYS.map((d,i) => {
+      const h=hrs[i], p=Math.round((h/mx)*100);
+      return `<div class="day-cell"><div class="day-lbl">${d}</div><div class="day-bar-wrap"><div class="day-bar" style="height:${p}%"></div></div><div class="day-h">${h.toFixed(1)}h</div></div>`;
+    }).join('');
+  } catch(e) { console.error(e); }
+}
+
+async function renderStats() {
+  if (!CU) return;
+  try {
+    const now = new Date(), day = now.getDay()||7;
+    const mon = new Date(now); mon.setDate(now.getDate()-day+1); mon.setHours(0,0,0,0);
+    const mStart = new Date(now.getFullYear(),now.getMonth(),1);
+    const snap = await db.collection('pointages').where('userId','==',CU.uid).where('endTime','>=',mStart.toISOString()).get();
+    const entries = snap.docs.map(d=>d.data());
+    const mH = entries.reduce((a,e)=>a+e.duration,0);
+    const wH = entries.filter(e=>new Date(e.endTime)>=mon).reduce((a,e)=>a+e.duration,0);
+    const days = new Set(entries.map(e=>e.date)).size;
+    document.getElementById('st-week').textContent = wH.toFixed(1)+'h';
+    document.getElementById('st-month').textContent = mH.toFixed(1)+'h';
+    document.getElementById('st-days').textContent = days;
+    document.getElementById('st-avg').textContent = (days?mH/days:0).toFixed(1)+'h';
+  } catch(e) { console.error(e); }
+  await renderWeeklyRecap();
+}
+
+async function renderWeeklyRecap() {
+  if (!CU) return;
+  const el = document.getElementById('weekly-recap');
+  try {
+    // Récupérer les 12 dernières semaines
+    const now = new Date();
+    const day = now.getDay() || 7;
+    const thisMon = new Date(now);
+    thisMon.setDate(now.getDate() - day + 1);
+    thisMon.setHours(0,0,0,0);
+    const startFrom = new Date(thisMon);
+    startFrom.setDate(startFrom.getDate() - 11 * 7); // 12 semaines en arrière
+
+    const snap = await db.collection('pointages')
+      .where('userId', '==', CU.uid)
+      .where('endTime', '>=', startFrom.toISOString())
+      .get();
+
+    const entries = snap.docs.map(d => d.data());
+
+    // Grouper par semaine (lundi)
+    const weeks = {};
+    entries.forEach(e => {
+      const d = new Date(e.endTime);
+      const wd = d.getDay() || 7;
+      const mon = new Date(d);
+      mon.setDate(d.getDate() - wd + 1);
+      mon.setHours(0,0,0,0);
+      const key = mon.toISOString().split('T')[0];
+      if (!weeks[key]) weeks[key] = { mon, total: 0, days: new Set() };
+      weeks[key].total += e.duration;
+      weeks[key].days.add(e.date);
+    });
+
+    const sorted = Object.entries(weeks).sort((a,b) => b[0].localeCompare(a[0]));
+
+    if (!sorted.length) {
+      el.innerHTML = '<div class="empty-state">Aucune donnée disponible</div>';
+      return;
+    }
+
+    el.innerHTML = sorted.map(([key, w]) => {
+      const monStr = w.mon.toLocaleDateString('fr-FR', {day:'2-digit', month:'2-digit'});
+      const fri = new Date(w.mon); fri.setDate(w.mon.getDate() + 4);
+      const friStr = fri.toLocaleDateString('fr-FR', {day:'2-digit', month:'2-digit'});
+      const isThisWeek = key === thisMon.toISOString().split('T')[0];
+      const pct = Math.min(Math.round((w.total / 35) * 100), 100);
+      const color = w.total > 35 ? '#7F77DD' : w.total === 35 || (w.total > 34.9) ? '#1D9E75' : '#E24B4A';
+      return `<div style="padding: 10px 0; border-bottom: 1px solid #f5f5f5;">
+        <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:6px;">
+          <div>
+            <span style="font-size:13px; font-weight:500; color:#222;">${monStr} — ${friStr}</span>
+            ${isThisWeek ? '<span style="font-size:11px;background:#EEEDFE;color:#534AB7;padding:2px 7px;border-radius:8px;margin-left:6px;font-weight:500;">Semaine actuelle</span>' : ''}
+          </div>
+          <span style="font-size:14px; font-weight:700; color:${color};">${w.total.toFixed(1)}h</span>
+        </div>
+        <div style="height:6px; background:#f0f0f0; border-radius:3px; overflow:hidden;">
+          <div style="height:100%; width:${pct}%; background:${color}; border-radius:3px; transition:width 0.3s;"></div>
+        </div>
+        <div style="font-size:11px; color:#aaa; margin-top:4px;">${w.days.size} jour${w.days.size > 1 ? 's' : ''} travaillé${w.days.size > 1 ? 's' : ''} · objectif 35h</div>
+      </div>`;
+    }).join('');
+  } catch(e) {
+    el.innerHTML = '<div class="empty-state" style="color:#E24B4A">Erreur : ' + e.message + '</div>';
+    console.error(e);
+  }
+}
+
+// =============================================
+// ADMIN — TOUS LES POINTAGES
+// =============================================
+function listenAllPointages() {
+  if (unsubAllPointages) unsubAllPointages();
+  try {
+    unsubAllPointages = db.collection('pointages').orderBy('endTime','desc').onSnapshot(snap => {
+      allPointagesData = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+      renderAllPointages();
+      updateAdminStats();
+    });
+  } catch(e) { console.error(e); }
+}
+
+function renderAllPointages() {
+  const el = document.getElementById('all-pointages');
+  const search = (document.getElementById('f-search')?.value || '').toLowerCase();
+  const from = document.getElementById('f-date-from')?.value;
+  const to = document.getElementById('f-date-to')?.value;
+
+  let filtered = allPointagesData;
+  if (search) filtered = filtered.filter(e => (e.userName||'').toLowerCase().includes(search));
+  if (from) filtered = filtered.filter(e => e.date >= from);
+  if (to) filtered = filtered.filter(e => e.date <= to);
+
+  if (!filtered.length) { el.innerHTML = '<div class="empty-state">Aucun pointage trouvé</div>'; return; }
+
+  el.innerHTML = filtered.slice(0,50).map(e => {
+    const end = new Date(e.endTime);
+    const dateStr = end.toLocaleDateString('fr-FR',{weekday:'short',day:'2-digit',month:'2-digit',year:'2-digit'});
+    const s = new Date(e.startTime).toLocaleTimeString('fr-FR',{hour:'2-digit',minute:'2-digit'});
+    const en = end.toLocaleTimeString('fr-FR',{hour:'2-digit',minute:'2-digit'});
+    return `<div class="pointage-row">
+      <div class="pointage-info">
+        <div class="pointage-name">${e.userName || 'Inconnu'}</div>
+        <div class="pointage-detail">${dateStr} · ${s} → ${en} <span class="h-dur" style="margin-left:4px">${e.duration.toFixed(1)}h</span></div>
+      </div>
+      <div style="display:flex;gap:5px;flex-shrink:0">
+        <button class="btn-sm btn-edit" onclick="openEdit('${e.id}')">Éditer</button>
+        <button class="btn-sm btn-danger" onclick="openDelete('${e.id}')">Suppr.</button>
+      </div>
+    </div>`;
+  }).join('');
+}
+
+['f-search','f-date-from','f-date-to'].forEach(id => {
+  document.getElementById(id)?.addEventListener('input', renderAllPointages);
+});
+
+// =============================================
+// ADMIN — STATS
+// =============================================
+async function updateAdminStats() {
+  try {
+    const usersSnap = await db.collection('users').where('active','==',true).get();
+    document.getElementById('a-total').textContent = usersSnap.size;
+
+    const badgesSnap = await db.collection('badges').get();
+    const present = badgesSnap.docs.filter(d => d.data().active).length;
+    document.getElementById('a-present').textContent = present;
+
+    const mStart = new Date(); mStart.setDate(1); mStart.setHours(0,0,0,0);
+    const pSnap = await db.collection('pointages').where('endTime','>=',mStart.toISOString()).get();
+    const totalH = pSnap.docs.reduce((a,d) => a + (d.data().duration||0), 0);
+    document.getElementById('a-hours').textContent = totalH.toFixed(0)+'h';
+  } catch(e) { console.error(e); }
+}
+
+// =============================================
+// ADMIN — EMPLOYÉS
+// =============================================
+function listenEmployees() {
+  if (unsubEmployees) unsubEmployees();
+  try {
+    unsubEmployees = db.collection('users').onSnapshot(snap => {
+      const el = document.getElementById('employees-list');
+      const users = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+      if (!users.length) { el.innerHTML = '<div class="empty-state">Aucun employé</div>'; return; }
+      users.sort((a,b) => (a.name||'').localeCompare(b.name||''));
+      el.innerHTML = users.map(u => {
+        const ini = (u.name||'?').split(' ').map(n=>n[0]).join('').toUpperCase().slice(0,2);
+        const isActive = u.active !== false;
+        return `<div class="admin-row">
+          <div class="avatar ${isActive?'':'inactive'}">${ini}</div>
+          <div class="admin-row-info">
+            <div class="emp-name">${u.name||'Sans nom'}</div>
+            <div class="emp-sub">${u.email||''} · ${u.team==='itinerant'?'Itinérant':'Sédentaire'}</div>
+          </div>
+          <div class="admin-row-actions">
+            <span class="sbadge ${isActive?'s-present':'s-disabled'}">${isActive?'Actif':'Désactivé'}</span>
+            <button class="btn-sm ${isActive?'btn-danger':'btn-edit'}" onclick="toggleEmployee('${u.id}', ${isActive})">
+              ${isActive?'Désactiver':'Réactiver'}
+            </button>
+          </div>
+        </div>`;
+      }).join('');
+    });
+  } catch(e) { console.error(e); }
+}
+
+window.toggleEmployee = async (uid, currentlyActive) => {
+  if (!confirm(currentlyActive ? 'Désactiver cet employé ?' : 'Réactiver cet employé ?')) return;
+  try {
+    await db.collection('users').doc(uid).update({ active: !currentlyActive });
+    if (currentlyActive) {
+      await db.collection('badges').doc(uid).set({ active: false, userId: uid });
+    }
+  } catch(e) { alert('Erreur : ' + e.message); }
+};
+
+// =============================================
+// ADMIN — ÉDITION / SUPPRESSION POINTAGE
+// =============================================
+window.openEdit = (docId) => {
+  const entry = allPointagesData.find(e => e.id === docId);
+  if (!entry) return;
+  editDocId = docId;
+  document.getElementById('edit-start').value = toLocalDatetime(entry.startTime);
+  document.getElementById('edit-end').value = toLocalDatetime(entry.endTime);
+  document.getElementById('modal-edit').style.display = 'flex';
+};
+
+document.getElementById('modal-save').addEventListener('click', async () => {
+  const startVal = document.getElementById('edit-start').value;
+  const endVal = document.getElementById('edit-end').value;
+  if (!startVal || !endVal) { alert('Veuillez remplir les deux champs.'); return; }
+  const start = new Date(startVal), end = new Date(endVal);
+  if (end <= start) { alert('La date de départ doit être après l\'arrivée.'); return; }
+  const dur = (end - start) / 3600000;
+  try {
+    await db.collection('pointages').doc(editDocId).update({
+      startTime: start.toISOString(), endTime: end.toISOString(),
+      duration: dur, date: start.toISOString().split('T')[0]
+    });
+    closeModal();
+  } catch(e) { alert('Erreur : ' + e.message); }
+});
+
+window.openDelete = (docId) => {
+  deleteDocId = docId;
+  document.getElementById('modal-delete').style.display = 'flex';
+};
+
+document.getElementById('modal-confirm-delete').addEventListener('click', async () => {
+  try {
+    await db.collection('pointages').doc(deleteDocId).delete();
+    closeModal();
+  } catch(e) { alert('Erreur : ' + e.message); }
+});
+
+// =============================================
+// EXPORT CSV
+// =============================================
+// Géocodage inverse via OpenStreetMap
+async function reverseGeocode(lat, lng) {
+  try {
+    const res = await fetch(`https://nominatim.openstreetmap.org/reverse?lat=${lat}&lon=${lng}&format=json`, {
+      headers: { 'Accept-Language': 'fr' }
+    });
+    const data = await res.json();
+    return data.display_name || (lat + ', ' + lng);
+  } catch(e) {
+    return lat + ', ' + lng;
+  }
+}
+
+// Calcul du lundi de la semaine d'une date
+function getMondayKey(dateStr) {
+  const d = new Date(dateStr);
+  const day = d.getDay() || 7;
+  const mon = new Date(d);
+  mon.setDate(d.getDate() - day + 1);
+  return mon.toISOString().split('T')[0];
+}
+
+document.getElementById('export-csv').addEventListener('click', async () => {
+  if (!allPointagesData.length) { alert('Aucune donnée à exporter.'); return; }
+
+  const btn = document.getElementById('export-csv');
+  btn.textContent = '⏳ Génération en cours...';
+  btn.disabled = true;
+
+  try {
+    // Géocodage de toutes les positions uniques
+    const geoCache = {};
+    const uniqueGeos = [...new Set(allPointagesData.filter(e => e.geo).map(e => e.geo.lat + ',' + e.geo.lng))];
+    for (const key of uniqueGeos) {
+      const [lat, lng] = key.split(',');
+      geoCache[key] = await reverseGeocode(lat, lng);
+      await new Promise(r => setTimeout(r, 200)); // respecter les limites OSM
+    }
+
+    // Grouper par salarié puis par semaine
+    const byEmployee = {};
+    allPointagesData.forEach(e => {
+      const name = e.userName || 'Inconnu';
+      if (!byEmployee[name]) byEmployee[name] = {};
+      const weekKey = getMondayKey(e.date);
+      if (!byEmployee[name][weekKey]) byEmployee[name][weekKey] = [];
+      byEmployee[name][weekKey].push(e);
+    });
+
+    const rows = [];
+    const headers = ['Salarié','Semaine','Date','Arrivée','Départ','Durée (h)','Type équipe','Adresse'];
+    rows.push(headers);
+
+    const employees = Object.keys(byEmployee).sort();
+
+    for (const empName of employees) {
+      const weeks = byEmployee[empName];
+      const weekKeys = Object.keys(weeks).sort();
+      let empTotalMonth = 0;
+
+      // Grouper les semaines par mois
+      const byMonth = {};
+      weekKeys.forEach(wk => {
+        const month = wk.substring(0, 7);
+        if (!byMonth[month]) byMonth[month] = [];
+        byMonth[month].push(wk);
+      });
+
+      for (const month of Object.keys(byMonth).sort()) {
+        const monthWeeks = byMonth[month];
+        let monthTotal = 0;
+
+        for (const weekKey of monthWeeks) {
+          const entries = weeks[weekKey];
+          let weekTotal = 0;
+
+          // Ligne d'en-tête de semaine
+          const monDate = new Date(weekKey);
+          const friDate = new Date(weekKey); friDate.setDate(monDate.getDate() + 4);
+          const weekLabel = 'Semaine du ' + monDate.toLocaleDateString('fr-FR',{day:'2-digit',month:'2-digit'}) + ' au ' + friDate.toLocaleDateString('fr-FR',{day:'2-digit',month:'2-digit'});
+
+          for (const e of entries) {
+            const start = new Date(e.startTime), end = new Date(e.endTime);
+            const geoKey = e.geo ? e.geo.lat + ',' + e.geo.lng : null;
+            const address = geoKey ? (geoCache[geoKey] || '') : 'Non enregistrée';
+            rows.push([
+              empName,
+              weekLabel,
+              start.toLocaleDateString('fr-FR'),
+              start.toLocaleTimeString('fr-FR',{hour:'2-digit',minute:'2-digit'}),
+              end.toLocaleTimeString('fr-FR',{hour:'2-digit',minute:'2-digit'}),
+              e.duration.toFixed(2),
+              e.team === 'itinerant' ? 'Itinérant' : 'Sédentaire',
+              address
+            ]);
+            weekTotal += e.duration;
+          }
+
+          // Sous-total semaine
+          rows.push([empName, weekLabel, '', '', 'TOTAL SEMAINE', weekTotal.toFixed(2), '', '']);
+          rows.push(['', '', '', '', '', '', '', '']); // ligne vide
+          monthTotal += weekTotal;
+        }
+
+        // Total mensuel par salarié
+        const monthName = new Date(month + '-01').toLocaleDateString('fr-FR',{month:'long',year:'numeric'});
+        rows.push([empName, '', '', '', 'TOTAL ' + monthName.toUpperCase(), monthTotal.toFixed(2), '', '']);
+        rows.push(['', '', '', '', '', '', '', '']); // ligne vide
+        empTotalMonth += monthTotal;
+      }
+
+      // Séparateur entre salariés
+      rows.push(['━━━', '━━━', '━━━', '━━━', '━━━', '━━━', '━━━', '━━━']);
+      rows.push(['', '', '', '', '', '', '', '']);
+    }
+
+    // Ajouter les congés validés
+    const congesSnap = await db.collection('conges').where('status', '==', 'approved').get();
+    const congesByEmp = {};
+    congesSnap.docs.forEach(d => {
+      const c = d.data();
+      if (!congesByEmp[c.userName]) congesByEmp[c.userName] = [];
+      congesByEmp[c.userName].push(c);
+    });
+
+    if (congesSnap.size > 0) {
+      rows.push(['', '', '', '', '', '', '', '']);
+      rows.push(['=== ABSENCES ET CONGES VALIDES ===', '', '', '', '', '', '', '']);
+      rows.push(['Salarie', 'Type', 'Date', '', '', 'Jours ouvres', '', 'Commentaire']);
+      Object.keys(congesByEmp).sort().forEach(empName => {
+        congesByEmp[empName].forEach(c => {
+          const typeLabel = { cp: 'Conges payes', rtt: 'RTT', maladie: 'Maladie', autre: 'Autre' }[c.type];
+          const startFr = new Date(c.start).toLocaleDateString('fr-FR');
+          const endFr = new Date(c.end).toLocaleDateString('fr-FR');
+          // Une ligne par jour ouvre
+          const cur = new Date(c.start);
+          const end = new Date(c.end);
+          while (cur <= end) {
+            const wd = cur.getDay();
+            if (wd !== 0 && wd !== 6) {
+              rows.push([empName, typeLabel, cur.toLocaleDateString('fr-FR'), '', '', '1', '', c.comment || '']);
+            }
+            cur.setDate(cur.getDate() + 1);
+          }
+        });
+      });
+    }
+
+    // Ajouter les congés validés — une ligne par jour ouvré
+    const congesSnap = await db.collection('conges').where('status', '==', 'approved').get();
+    if (!congesSnap.empty) {
+      rows.push(['', '', '', '', '', '', '', '']);
+      rows.push(['=== ABSENCES ET CONGES VALIDES ===', '', '', '', '', '', '', '']);
+      rows.push(['Salarie', 'Type absence', 'Date', 'Debut periode', 'Fin periode', 'Jours ouvres', '', 'Commentaire']);
+      const typeLabel = { cp: 'Conges payes', rtt: 'RTT', maladie: 'Maladie', autre: 'Autre' };
+      congesSnap.docs.sort((a,b) => a.data().userName.localeCompare(b.data().userName)).forEach(d => {
+        const c = d.data();
+        const startFr = new Date(c.start).toLocaleDateString('fr-FR');
+        const endFr = new Date(c.end).toLocaleDateString('fr-FR');
+        const cur = new Date(c.start);
+        const endD = new Date(c.end);
+        while (cur <= endD) {
+          if (cur.getDay() !== 0 && cur.getDay() !== 6) {
+            rows.push([c.userName, typeLabel[c.type] || c.type, cur.toLocaleDateString('fr-FR'), startFr, endFr, '1', '', c.comment || '']);
+          }
+          cur.setDate(cur.getDate() + 1);
+        }
+      });
+    }
+
+    const csv = rows.map(r => r.map(v => '"' + String(v).replace(/"/g, '""') + '"').join(';')).join('\n');
+    const blob = new Blob(['\uFEFF' + csv], {type: 'text/csv;charset=utf-8'});
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = 'suivi_heures_' + new Date().toISOString().split('T')[0] + '.csv';
+    a.click();
+    URL.revokeObjectURL(url);
+
+  } catch(e) {
+    alert('Erreur lors de la génération : ' + e.message);
+    console.error(e);
+  } finally {
+    btn.textContent = '⬇ Exporter CSV';
+    btn.disabled = false;
+  }
+});
+
+// =============================================
+// CONGÉS
+// =============================================
+let unsubMyConges = null, unsubAllConges = null;
+let currentCongeId = null;
+
+const CONGE_LABELS = { cp: 'Congés payés', rtt: 'RTT', maladie: 'Maladie', autre: 'Autre' };
+const CONGE_CLASS = { cp: 'conge-cp', rtt: 'conge-rtt', maladie: 'conge-mal', autre: 'conge-autre' };
+
+function openCongeModal() {
+  document.getElementById('conge-err').textContent = '';
+  document.getElementById('conge-type').value = 'cp';
+  document.getElementById('conge-start').value = '';
+  document.getElementById('conge-end').value = '';
+  document.getElementById('conge-comment').value = '';
+  document.getElementById('modal-conge').style.display = 'flex';
+}
+
+document.getElementById('conge-save').addEventListener('click', async () => {
+  const type = document.getElementById('conge-type').value;
+  const start = document.getElementById('conge-start').value;
+  const end = document.getElementById('conge-end').value;
+  const comment = document.getElementById('conge-comment').value.trim();
+  const errEl = document.getElementById('conge-err');
+  errEl.textContent = '';
+
+  if (!start || !end) { errEl.textContent = 'Veuillez renseigner les dates.'; return; }
+  if (end < start) { errEl.textContent = 'La date de fin doit être après la date de début.'; return; }
+
+  // Calculer le nombre de jours ouvrés
+  const days = countWorkdays(new Date(start), new Date(end));
+
+  try {
+    await db.collection('conges').add({
+      userId: CU.uid,
+      userName: UP?.name || CU.email,
+      type, start, end,
+      days,
+      comment,
+      status: 'pending',
+      createdAt: new Date().toISOString()
+    });
+    closeModal();
+  } catch(e) { errEl.textContent = 'Erreur : ' + e.message; }
+});
+
+function countWorkdays(start, end) {
+  let count = 0;
+  const cur = new Date(start);
+  while (cur <= end) {
+    const d = cur.getDay();
+    if (d !== 0 && d !== 6) count++;
+    cur.setDate(cur.getDate() + 1);
+  }
+  return count;
+}
+
+function listenMyConges() {
+  if (unsubMyConges) unsubMyConges();
+  unsubMyConges = db.collection('conges')
+    .where('userId', '==', CU.uid)
+    .orderBy('createdAt', 'desc')
+    .onSnapshot(snap => {
+      const el = document.getElementById('my-conges');
+      if (snap.empty) { el.innerHTML = '<div class="empty-state">Aucune demande pour le moment</div>'; return; }
+      el.innerHTML = snap.docs.map(d => {
+        const c = d.data();
+        const statusLabel = { pending: 'En attente', approved: 'Validé', refused: 'Refusé' }[c.status];
+        const statusClass = { pending: 'cs-pending', approved: 'cs-approved', refused: 'cs-refused' }[c.status];
+        const startFr = new Date(c.start).toLocaleDateString('fr-FR', {day:'2-digit', month:'2-digit', year:'2-digit'});
+        const endFr = new Date(c.end).toLocaleDateString('fr-FR', {day:'2-digit', month:'2-digit', year:'2-digit'});
+        return `<div class="conge-row">
+          <div style="flex:1">
+            <div style="display:flex;align-items:center;gap:6px;margin-bottom:4px">
+              <span class="conge-type ${CONGE_CLASS[c.type]}">${CONGE_LABELS[c.type]}</span>
+              <span class="conge-status ${statusClass}">${statusLabel}</span>
+            </div>
+            <div style="font-size:13px;font-weight:500;color:#222;">${startFr} → ${endFr} · ${c.days} jour${c.days > 1 ? 's' : ''}</div>
+            ${c.comment ? `<div style="font-size:11px;color:#aaa;margin-top:2px;">${c.comment}</div>` : ''}
+          </div>
+          ${c.status === 'pending' ? `<button class="btn-sm btn-danger" onclick="deleteConge('${d.id}')">Annuler</button>` : ''}
+        </div>`;
+      }).join('');
+    }, err => console.error(err));
+}
+
+window.deleteConge = async (id) => {
+  if (!confirm('Annuler cette demande ?')) return;
+  await db.collection('conges').doc(id).delete();
+};
+
+// Admin : toutes les demandes
+function listenAllConges() {
+  if (unsubAllConges) unsubAllConges();
+  unsubAllConges = db.collection('conges')
+    .orderBy('createdAt', 'desc')
+    .onSnapshot(snap => {
+      const el = document.getElementById('all-conges');
+      const pending = snap.docs.filter(d => d.data().status === 'pending').length;
+      const countEl = document.getElementById('pending-count');
+      if (pending > 0) {
+        countEl.style.display = 'inline';
+        countEl.textContent = pending + ' en attente';
+      } else {
+        countEl.style.display = 'none';
+      }
+      if (snap.empty) { el.innerHTML = '<div class="empty-state">Aucune demande</div>'; return; }
+      el.innerHTML = snap.docs.map(d => {
+        const c = d.data();
+        const statusLabel = { pending: 'En attente', approved: 'Validé', refused: 'Refusé' }[c.status];
+        const statusClass = { pending: 'cs-pending', approved: 'cs-approved', refused: 'cs-refused' }[c.status];
+        const startFr = new Date(c.start).toLocaleDateString('fr-FR', {day:'2-digit', month:'2-digit', year:'2-digit'});
+        const endFr = new Date(c.end).toLocaleDateString('fr-FR', {day:'2-digit', month:'2-digit', year:'2-digit'});
+        return `<div class="conge-row">
+          <div style="flex:1">
+            <div style="font-size:13px;font-weight:600;color:#222;margin-bottom:4px;">${c.userName}</div>
+            <div style="display:flex;align-items:center;gap:6px;margin-bottom:4px">
+              <span class="conge-type ${CONGE_CLASS[c.type]}">${CONGE_LABELS[c.type]}</span>
+              <span class="conge-status ${statusClass}">${statusLabel}</span>
+            </div>
+            <div style="font-size:13px;color:#555;">${startFr} → ${endFr} · ${c.days} jour${c.days > 1 ? 's' : ''}</div>
+            ${c.comment ? `<div style="font-size:11px;color:#aaa;margin-top:2px;">${c.comment}</div>` : ''}
+          </div>
+          ${c.status === 'pending' ? `<button class="btn-sm btn-edit" onclick="openAdminConge('${d.id}')">Traiter</button>` : `<button class="btn-sm" style="background:#f0f0f0;color:#888" onclick="openAdminConge('${d.id}')">Voir</button>`}
+        </div>`;
+      }).join('');
+    }, err => console.error(err));
+}
+
+window.openAdminConge = (id) => {
+  currentCongeId = id;
+  const snap = db.collection('conges').doc(id).get().then(d => {
+    const c = d.data();
+    const startFr = new Date(c.start).toLocaleDateString('fr-FR', {day:'2-digit', month:'long', year:'numeric'});
+    const endFr = new Date(c.end).toLocaleDateString('fr-FR', {day:'2-digit', month:'long', year:'numeric'});
+    document.getElementById('modal-conge-admin-title').textContent = 'Demande de ' + c.userName;
+    document.getElementById('modal-conge-admin-body').innerHTML =
+      `<b>Type :</b> ${CONGE_LABELS[c.type]}<br>
+       <b>Période :</b> ${startFr} → ${endFr}<br>
+       <b>Durée :</b> ${c.days} jour${c.days > 1 ? 's' : ''} ouvré${c.days > 1 ? 's' : ''}<br>
+       ${c.comment ? `<b>Commentaire :</b> ${c.comment}<br>` : ''}
+       <b>Statut actuel :</b> ${{ pending: 'En attente', approved: 'Validé', refused: 'Refusé' }[c.status]}`;
+    const isPending = c.status === 'pending';
+    document.getElementById('conge-approve').style.display = isPending ? '' : 'none';
+    document.getElementById('conge-refuse').style.display = isPending ? '' : 'none';
+    document.getElementById('modal-conge-admin').style.display = 'flex';
+  });
+};
+
+document.getElementById('conge-approve').addEventListener('click', async () => {
+  await db.collection('conges').doc(currentCongeId).update({ status: 'approved' });
+  closeModal();
+});
+
+document.getElementById('conge-refuse').addEventListener('click', async () => {
+  await db.collection('conges').doc(currentCongeId).update({ status: 'refused' });
+  closeModal();
+});
+
+
+// =============================================
+// CONGÉS
+// =============================================
+let unsubMyConges = null, unsubAllConges = null;
+let currentCongeId = null;
+
+const CONGE_LABELS = { cp: 'Congés payés', rtt: 'RTT', maladie: 'Maladie', autre: 'Autre' };
+const CONGE_CLASS = { cp: 'conge-cp', rtt: 'conge-rtt', maladie: 'conge-mal', autre: 'conge-autre' };
+
+function openCongeModal() {
+  document.getElementById('conge-err').textContent = '';
+  document.getElementById('conge-type').value = 'cp';
+  document.getElementById('conge-start').value = '';
+  document.getElementById('conge-end').value = '';
+  document.getElementById('conge-comment').value = '';
+  document.getElementById('modal-conge').style.display = 'flex';
+}
+
+document.getElementById('conge-save').addEventListener('click', async () => {
+  const type = document.getElementById('conge-type').value;
+  const start = document.getElementById('conge-start').value;
+  const end = document.getElementById('conge-end').value;
+  const comment = document.getElementById('conge-comment').value.trim();
+  const errEl = document.getElementById('conge-err');
+  errEl.textContent = '';
+  if (!start || !end) { errEl.textContent = 'Veuillez renseigner les dates.'; return; }
+  if (end < start) { errEl.textContent = 'La date de fin doit etre apres la date de debut.'; return; }
+  const days = countWorkdays(new Date(start), new Date(end));
+  try {
+    await db.collection('conges').add({
+      userId: CU.uid, userName: UP?.name || CU.email,
+      type, start, end, days, comment, status: 'pending',
+      createdAt: new Date().toISOString()
+    });
+    closeModal();
+  } catch(e) { errEl.textContent = 'Erreur : ' + e.message; }
+});
+
+function countWorkdays(start, end) {
+  let count = 0;
+  const cur = new Date(start);
+  while (cur <= end) {
+    const d = cur.getDay();
+    if (d !== 0 && d !== 6) count++;
+    cur.setDate(cur.getDate() + 1);
+  }
+  return count;
+}
+
+function listenMyConges() {
+  if (unsubMyConges) unsubMyConges();
+  unsubMyConges = db.collection('conges')
+    .where('userId', '==', CU.uid)
+    .orderBy('createdAt', 'desc')
+    .onSnapshot(snap => {
+      const el = document.getElementById('my-conges');
+      if (!el) return;
+      if (snap.empty) { el.innerHTML = '<div class="empty-state">Aucune demande pour le moment</div>'; return; }
+      el.innerHTML = snap.docs.map(d => {
+        const c = d.data();
+        const statusLabel = { pending: 'En attente', approved: 'Valide', refused: 'Refuse' }[c.status];
+        const statusClass = { pending: 'cs-pending', approved: 'cs-approved', refused: 'cs-refused' }[c.status];
+        const startFr = new Date(c.start).toLocaleDateString('fr-FR', {day:'2-digit', month:'2-digit', year:'2-digit'});
+        const endFr = new Date(c.end).toLocaleDateString('fr-FR', {day:'2-digit', month:'2-digit', year:'2-digit'});
+        return '<div class="conge-row">' +
+          '<div style="flex:1">' +
+          '<div style="display:flex;align-items:center;gap:6px;margin-bottom:4px">' +
+          '<span class="conge-type ' + CONGE_CLASS[c.type] + '">' + CONGE_LABELS[c.type] + '</span>' +
+          '<span class="conge-status ' + statusClass + '">' + statusLabel + '</span>' +
+          '</div>' +
+          '<div style="font-size:13px;font-weight:500;color:#222;">' + startFr + ' -> ' + endFr + ' · ' + c.days + ' jour' + (c.days > 1 ? 's' : '') + '</div>' +
+          (c.comment ? '<div style="font-size:11px;color:#aaa;margin-top:2px;">' + c.comment + '</div>' : '') +
+          '</div>' +
+          (c.status === 'pending' ? '<button class="btn-sm btn-danger" onclick="deleteConge(\'' + d.id + '\')">Annuler</button>' : '') +
+          '</div>';
+      }).join('');
+    }, err => console.error(err));
+}
+
+window.deleteConge = async (id) => {
+  if (!confirm('Annuler cette demande ?')) return;
+  await db.collection('conges').doc(id).delete();
+};
+
+function listenAllConges() {
+  if (unsubAllConges) unsubAllConges();
+  unsubAllConges = db.collection('conges')
+    .orderBy('createdAt', 'desc')
+    .onSnapshot(snap => {
+      const el = document.getElementById('all-conges');
+      if (!el) return;
+      const pending = snap.docs.filter(d => d.data().status === 'pending').length;
+      const countEl = document.getElementById('pending-count');
+      if (countEl) {
+        countEl.style.display = pending > 0 ? 'inline' : 'none';
+        countEl.textContent = pending + ' en attente';
+      }
+      if (snap.empty) { el.innerHTML = '<div class="empty-state">Aucune demande</div>'; return; }
+      el.innerHTML = snap.docs.map(d => {
+        const c = d.data();
+        const statusLabel = { pending: 'En attente', approved: 'Valide', refused: 'Refuse' }[c.status];
+        const statusClass = { pending: 'cs-pending', approved: 'cs-approved', refused: 'cs-refused' }[c.status];
+        const startFr = new Date(c.start).toLocaleDateString('fr-FR', {day:'2-digit', month:'2-digit', year:'2-digit'});
+        const endFr = new Date(c.end).toLocaleDateString('fr-FR', {day:'2-digit', month:'2-digit', year:'2-digit'});
+        return '<div class="conge-row">' +
+          '<div style="flex:1">' +
+          '<div style="font-size:13px;font-weight:600;color:#222;margin-bottom:4px;">' + c.userName + '</div>' +
+          '<div style="display:flex;align-items:center;gap:6px;margin-bottom:4px">' +
+          '<span class="conge-type ' + CONGE_CLASS[c.type] + '">' + CONGE_LABELS[c.type] + '</span>' +
+          '<span class="conge-status ' + statusClass + '">' + statusLabel + '</span>' +
+          '</div>' +
+          '<div style="font-size:13px;color:#555;">' + startFr + ' -> ' + endFr + ' · ' + c.days + ' jour' + (c.days > 1 ? 's' : '') + '</div>' +
+          (c.comment ? '<div style="font-size:11px;color:#aaa;margin-top:2px;">' + c.comment + '</div>' : '') +
+          '</div>' +
+          (c.status === 'pending'
+            ? '<button class="btn-sm btn-edit" onclick="openAdminConge(\'' + d.id + '\')">Traiter</button>'
+            : '<button class="btn-sm" style="background:#f0f0f0;color:#888" onclick="openAdminConge(\'' + d.id + '\')">Voir</button>') +
+          '</div>';
+      }).join('');
+    }, err => console.error(err));
+}
+
+window.openAdminConge = (id) => {
+  currentCongeId = id;
+  db.collection('conges').doc(id).get().then(d => {
+    const c = d.data();
+    const startFr = new Date(c.start).toLocaleDateString('fr-FR', {day:'2-digit', month:'long', year:'numeric'});
+    const endFr = new Date(c.end).toLocaleDateString('fr-FR', {day:'2-digit', month:'long', year:'numeric'});
+    document.getElementById('modal-conge-admin-title').textContent = 'Demande de ' + c.userName;
+    const statusFr = { pending: 'En attente', approved: 'Valide', refused: 'Refuse' }[c.status];
+    document.getElementById('modal-conge-admin-body').innerHTML =
+      '<b>Type :</b> ' + CONGE_LABELS[c.type] + '<br>' +
+      '<b>Periode :</b> ' + startFr + ' au ' + endFr + '<br>' +
+      '<b>Duree :</b> ' + c.days + ' jour' + (c.days > 1 ? 's' : '') + ' ouvre' + (c.days > 1 ? 's' : '') + '<br>' +
+      (c.comment ? '<b>Commentaire :</b> ' + c.comment + '<br>' : '') +
+      '<b>Statut :</b> ' + statusFr;
+    const isPending = c.status === 'pending';
+    document.getElementById('conge-approve').style.display = isPending ? '' : 'none';
+    document.getElementById('conge-refuse').style.display = isPending ? '' : 'none';
+    document.getElementById('modal-conge-admin').style.display = 'flex';
+  });
+};
+
+document.getElementById('conge-approve').addEventListener('click', async () => {
+  await db.collection('conges').doc(currentCongeId).update({ status: 'approved' });
+  closeModal();
+});
+
+document.getElementById('conge-refuse').addEventListener('click', async () => {
+  await db.collection('conges').doc(currentCongeId).update({ status: 'refused' });
+  closeModal();
+});
+
+// =============================================
+// NAVIGATION
+// =============================================
+function switchTab(btn) {
+  document.querySelectorAll('.nav-btn').forEach(b => b.classList.remove('active'));
+  document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+  btn.classList.add('active');
+  document.getElementById('tab-'+btn.dataset.tab).classList.add('active');
+  if (btn.dataset.tab === 'profile') renderStats();
+  if (btn.dataset.tab === 'conges') listenMyConges();
+  if (btn.dataset.tab === 'admin-conges') listenAllConges();
+}
+
+document.querySelectorAll('.nav-btn').forEach(btn => {
+  btn.addEventListener('click', () => switchTab(btn));
+});
+</script>
+</body>
+</html>
