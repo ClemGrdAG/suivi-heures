@@ -724,23 +724,62 @@ function listenHistory() {
 function listenTeam() {
   if (unsubTeam) unsubTeam();
   try {
-    const q = isAdmin ? db.collection('badges') : db.collection('badges').where('userId', '==', CU.uid);
-    unsubTeam = q.onSnapshot(snap => {
-      const el = document.getElementById('team-list');
-      const members = snap.docs.map(d => d.data()).filter(d => d.userId);
-      if (!members.length) { el.innerHTML = '<div class="empty-state">Aucun statut enregistré</div>'; return; }
-      members.sort((a,b) => (b.active?1:0)-(a.active?1:0));
-      el.innerHTML = members.map(m => {
-        const name = m.userName || 'Inconnu';
-        const ini = name.split(' ').map(n=>n[0]).join('').toUpperCase().slice(0,2);
-        const since = m.startTime ? new Date(m.startTime).toLocaleTimeString('fr-FR',{hour:'2-digit',minute:'2-digit'}) : '';
-        return `<div class="team-row">
-          <div class="avatar ${m.active?'':'inactive'}">${ini}</div>
-          <div style="flex:1"><div class="emp-name">${name}</div><div class="emp-sub">${m.active?'⏱ Depuis '+since:'Absent'} · ${m.team==='itinerant'?'Itinérant':'Sédentaire'}</div></div>
-          <span class="sbadge ${m.active?'s-present':'s-absent'}">${m.active?'Présent':'Absent'}</span>
-        </div>`;
-      }).join('');
-    });
+    if (isAdmin) {
+      // Admin : croiser users + badges pour afficher tout le monde avec le bon nom
+      unsubTeam = db.collection('badges').onSnapshot(async snap => {
+        const el = document.getElementById('team-list');
+        const badgesMap = {};
+        snap.docs.forEach(d => { badgesMap[d.id] = d.data(); });
+
+        // Récupérer tous les utilisateurs actifs
+        const usersSnap = await db.collection('users').where('active', '==', true).get();
+        if (usersSnap.empty) { el.innerHTML = '<div class="empty-state">Aucun membre enregistré</div>'; return; }
+
+        const members = usersSnap.docs.map(d => {
+          const user = d.data();
+          const badge = badgesMap[d.id] || {};
+          return {
+            name: user.name || user.email || 'Inconnu',
+            team: user.team || 'sedentaire',
+            active: badge.active || false,
+            startTime: badge.startTime || null
+          };
+        });
+
+        members.sort((a,b) => (b.active?1:0)-(a.active?1:0) || a.name.localeCompare(b.name));
+        el.innerHTML = members.map(m => {
+          const ini = m.name.split(' ').map(n=>n[0]).join('').toUpperCase().slice(0,2);
+          const since = m.startTime ? new Date(m.startTime).toLocaleTimeString('fr-FR',{hour:'2-digit',minute:'2-digit'}) : '';
+          return '<div class="team-row">' +
+            '<div class="avatar ' + (m.active?'':'inactive') + '">' + ini + '</div>' +
+            '<div style="flex:1"><div class="emp-name">' + m.name + '</div>' +
+            '<div class="emp-sub">' + (m.active ? '⏱ Depuis ' + since : 'Absent') + ' · ' + (m.team==='itinerant'?'Itinérant':'Sédentaire') + '</div></div>' +
+            '<span class="sbadge ' + (m.active?'s-present':'s-absent') + '">' + (m.active?'Présent':'Absent') + '</span>' +
+            '</div>';
+        }).join('');
+      });
+    } else {
+      // Salarié : uniquement son propre statut
+      unsubTeam = db.collection('badges').where('userId', '==', CU.uid).onSnapshot(snap => {
+        const el = document.getElementById('team-list');
+        const members = snap.docs.map(d => d.data()).filter(d => d.userId);
+        if (!members.length) {
+          el.innerHTML = '<div class="empty-state">Vous n'avez pas encore badgé aujourd'hui</div>';
+          return;
+        }
+        el.innerHTML = members.map(m => {
+          const name = m.userName || 'Inconnu';
+          const ini = name.split(' ').map(n=>n[0]).join('').toUpperCase().slice(0,2);
+          const since = m.startTime ? new Date(m.startTime).toLocaleTimeString('fr-FR',{hour:'2-digit',minute:'2-digit'}) : '';
+          return '<div class="team-row">' +
+            '<div class="avatar ' + (m.active?'':'inactive') + '">' + ini + '</div>' +
+            '<div style="flex:1"><div class="emp-name">' + name + '</div>' +
+            '<div class="emp-sub">' + (m.active ? '⏱ Depuis ' + since : 'Absent') + ' · ' + (m.team==='itinerant'?'Itinérant':'Sédentaire') + '</div></div>' +
+            '<span class="sbadge ' + (m.active?'s-present':'s-absent') + '">' + (m.active?'Présent':'Absent') + '</span>' +
+            '</div>';
+        }).join('');
+      });
+    }
   } catch(e) { console.error(e); }
 }
 
