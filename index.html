@@ -764,7 +764,7 @@ function listenTeam() {
         const el = document.getElementById('team-list');
         const members = snap.docs.map(d => d.data()).filter(d => d.userId);
         if (!members.length) {
-          el.innerHTML = '<div class="empty-state">Vous n'avez pas encore badgé aujourd'hui</div>';
+          el.innerHTML = '<div class="empty-state">Vous n\'avez pas encore badg\u00e9 aujourd\'hui</div>';
           return;
         }
         el.innerHTML = members.map(m => {
