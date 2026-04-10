@@ -808,9 +808,9 @@ function listenHistory() {
           const end = new Date(e.endTime);
           const dateStr = end.toLocaleDateString('fr-FR',{weekday:'long',day:'2-digit',month:'2-digit'});
           const startHour = start.getHours();
-          const period = startHour < 12 ? 'Matin' : (startHour < 14 ? 'Midi' : 'Après-midi');
-          const periodColor = startHour < 12 ? '#534AB7' : (startHour < 14 ? '#854F0B' : '#0F6E56');
-          const periodBg = startHour < 12 ? '#EEEDFE' : (startHour < 14 ? '#FAEEDA' : '#E1F5EE');
+          const period = startHour < 12 ? 'Matin' : 'Après-midi';
+          const periodColor = startHour < 12 ? '#534AB7' : '#0F6E56';
+          const periodBg = startHour < 12 ? '#EEEDFE' : '#E1F5EE';
           const s = start.toLocaleTimeString('fr-FR',{hour:'2-digit',minute:'2-digit'});
           const en2 = end.toLocaleTimeString('fr-FR',{hour:'2-digit',minute:'2-digit'});
           const loc = e.geo ? '📍 ' : '';
