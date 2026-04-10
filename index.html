@@ -365,6 +365,21 @@ input:focus, select:focus { outline: none; border-color: #7F77DD; background: #f
     </div>
   </div>
 
+  <!-- Modal solde initial -->
+  <div class="modal-overlay" id="modal-solde" style="display:none">
+    <div class="modal">
+      <h3 id="modal-solde-title">Solde initial</h3>
+      <p style="font-size:13px;color:#666;margin-bottom:1rem;">Saisissez le solde d'heures accumulé avant le 13/04/2025. Utilisez un nombre négatif si le salarié est en déficit.</p>
+      <label style="font-size:13px;color:#666;display:block;margin-bottom:4px">Solde en heures (ex: 3.5 pour +3h30, -2 pour -2h00)</label>
+      <input type="number" id="solde-input" step="0.25" placeholder="0" style="margin-bottom:8px" />
+      <div style="font-size:12px;color:#aaa;margin-bottom:12px;" id="solde-preview"></div>
+      <div class="modal-actions">
+        <button class="btn-secondary" onclick="closeModal()">Annuler</button>
+        <button class="btn-primary" id="solde-save">Enregistrer</button>
+      </div>
+    </div>
+  </div>
+
   <!-- Modal nouvelle demande de congé -->
   <div class="modal-overlay" id="modal-conge" style="display:none">
     <div class="modal">
@@ -462,6 +477,7 @@ function closeModal() {
   document.getElementById('modal-delete').style.display = 'none';
   document.getElementById('modal-conge').style.display = 'none';
   document.getElementById('modal-conge-admin').style.display = 'none';
+  document.getElementById('modal-solde').style.display = 'none';
 }
 function toLocalDatetime(isoStr) {
   const d = new Date(isoStr);
@@ -865,9 +881,13 @@ async function renderWeeklyRecap() {
     thisMon.setDate(now.getDate() - day + 1);
     thisMon.setHours(0,0,0,0);
 
-    // Récupérer TOUS les pointages depuis le début
+    // Date de départ du calcul : lundi 13 avril 2025
+    const START_DATE = new Date('2025-04-13T00:00:00');
+
+    // Récupérer les pointages depuis la date de départ
     const snap = await db.collection('pointages')
       .where('userId', '==', CU.uid)
+      .where('endTime', '>=', START_DATE.toISOString())
       .get();
 
     const entries = snap.docs.map(d => d.data());
@@ -880,6 +900,7 @@ async function renderWeeklyRecap() {
       const mon = new Date(d);
       mon.setDate(d.getDate() - wd + 1);
       mon.setHours(0,0,0,0);
+      if (mon < START_DATE) return; // ignorer les semaines avant le 13 avril
       const key = mon.toISOString().split('T')[0];
       if (!weeks[key]) weeks[key] = { mon, total: 0, days: new Set() };
       weeks[key].total += e.duration;
@@ -889,8 +910,12 @@ async function renderWeeklyRecap() {
     const thisWeekKey = thisMon.toISOString().split('T')[0];
     const sorted = Object.entries(weeks).sort((a,b) => b[0].localeCompare(a[0]));
 
-    // Calculer le solde total (toutes semaines SAUF semaine en cours)
-    let soldeTotal = 0;
+    // Récupérer le solde initial depuis Firebase
+    const userSnap = await db.collection('users').doc(CU.uid).get();
+    const soldeInitial = userSnap.exists ? (userSnap.data().soldeInitial || 0) : 0;
+
+    // Calculer le solde total (toutes semaines SAUF semaine en cours) + solde initial
+    let soldeTotal = soldeInitial;
     Object.entries(weeks).forEach(([key, w]) => {
       if (key !== thisWeekKey) {
         soldeTotal += w.total - 35;
@@ -910,7 +935,8 @@ async function renderWeeklyRecap() {
         : 'Heures en retard sur la semaine de 35h';
       soldeLbl.style.color = soldeTotal >= 0 ? '#0F6E56' : '#E24B4A';
       const nbSemaines = Object.keys(weeks).filter(k => k !== thisWeekKey).length;
-      soldeDetail.textContent = 'Calculé sur ' + nbSemaines + ' semaine' + (nbSemaines > 1 ? 's' : '') + ' (semaine en cours exclue)';
+      const soldeInitialStr = soldeInitial !== 0 ? ' · Solde initial : ' + formatSolde(soldeInitial) : '';
+      soldeDetail.textContent = 'Depuis le 13/04/2025 · ' + nbSemaines + ' semaine' + (nbSemaines > 1 ? 's' : '') + soldeInitialStr;
     }
 
     if (!sorted.length) {
@@ -1037,9 +1063,13 @@ async function computeAllSoldes() {
   thisMon.setDate(now.getDate() - day + 1);
   thisMon.setHours(0,0,0,0);
   const thisWeekKey = thisMon.toISOString().split('T')[0];
+  const START_DATE = new Date('2025-04-13T00:00:00');
 
   try {
-    const snap = await db.collection('pointages').get();
+    // Récupérer tous les pointages depuis le 13 avril
+    const snap = await db.collection('pointages')
+      .where('endTime', '>=', START_DATE.toISOString())
+      .get();
     const byUser = {};
     snap.docs.forEach(d => {
       const e = d.data();
@@ -1050,15 +1080,31 @@ async function computeAllSoldes() {
       const mon = new Date(dt);
       mon.setDate(dt.getDate() - wd + 1);
       mon.setHours(0,0,0,0);
+      if (mon < START_DATE) return;
       const key = mon.toISOString().split('T')[0];
-      if (key === thisWeekKey) return; // exclure semaine en cours
+      if (key === thisWeekKey) return;
       if (!byUser[e.userId][key]) byUser[e.userId][key] = 0;
       byUser[e.userId][key] += e.duration;
     });
+
+    // Récupérer les soldes initiaux de tous les users
+    const usersSnap = await db.collection('users').get();
+    const soldesInitiaux = {};
+    usersSnap.docs.forEach(d => {
+      soldesInitiaux[d.id] = d.data().soldeInitial || 0;
+    });
+
     employeesSolde = {};
     Object.entries(byUser).forEach(([uid, weeks]) => {
-      employeesSolde[uid] = Object.values(weeks).reduce((a, h) => a + (h - 35), 0);
+      const base = soldesInitiaux[uid] || 0;
+      employeesSolde[uid] = base + Object.values(weeks).reduce((a, h) => a + (h - 35), 0);
     });
+
+    // Ajouter les users avec solde initial mais sans pointages
+    Object.entries(soldesInitiaux).forEach(([uid, si]) => {
+      if (si !== 0 && !employeesSolde[uid]) employeesSolde[uid] = si;
+    });
+
   } catch(e) { console.error(e); }
 }
 
@@ -1086,6 +1132,7 @@ function listenEmployees() {
           </div>
           <div class="admin-row-actions">
             <span style="font-size:11px;font-weight:600;padding:3px 8px;border-radius:10px;background:${soldeBg};color:${soldeColor};">${soldeStr}</span>
+            <button class="btn-sm btn-edit" onclick="openSoldeModal('${u.id}', '${u.name||''}', ${u.soldeInitial||0})">Solde initial</button>
             <span class="sbadge ${isActive?'s-present':'s-disabled'}">${isActive?'Actif':'Désactivé'}</span>
             <button class="btn-sm ${isActive?'btn-danger':'btn-edit'}" onclick="toggleEmployee('${u.id}', ${isActive})">
               ${isActive?'Désactiver':'Réactiver'}
@@ -1457,6 +1504,35 @@ document.getElementById('conge-approve').addEventListener('click', async () => {
 document.getElementById('conge-refuse').addEventListener('click', async () => {
   await db.collection('conges').doc(currentCongeId).update({ status: 'refused' });
   closeModal();
+});
+
+// =============================================
+// SOLDE INITIAL
+// =============================================
+let currentSoldeUid = null;
+
+window.openSoldeModal = (uid, name, current) => {
+  currentSoldeUid = uid;
+  document.getElementById('modal-solde-title').textContent = 'Solde initial — ' + name;
+  document.getElementById('solde-input').value = current || 0;
+  updateSoldePreview();
+  document.getElementById('modal-solde').style.display = 'flex';
+};
+
+document.getElementById('solde-input').addEventListener('input', updateSoldePreview);
+
+function updateSoldePreview() {
+  const val = parseFloat(document.getElementById('solde-input').value) || 0;
+  document.getElementById('solde-preview').textContent = 'Soit : ' + formatSolde(val);
+}
+
+document.getElementById('solde-save').addEventListener('click', async () => {
+  const val = parseFloat(document.getElementById('solde-input').value) || 0;
+  try {
+    await db.collection('users').doc(currentSoldeUid).update({ soldeInitial: val });
+    await computeAllSoldes();
+    closeModal();
+  } catch(e) { alert('Erreur : ' + e.message); }
 });
 
 // =============================================
