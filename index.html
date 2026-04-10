@@ -176,7 +176,9 @@ input:focus, select:focus { outline: none; border-color: #7F77DD; background: #f
       <input type="email" id="l-email" placeholder="Adresse email" />
       <input type="password" id="l-pass" placeholder="Mot de passe" />
       <div class="error" id="l-err"></div>
+      <div class="success" id="l-success" style="font-size:13px;color:#0F6E56;margin-bottom:8px;min-height:18px;"></div>
       <button class="btn-primary" id="l-btn">Se connecter</button>
+      <button class="link-btn" id="l-forgot" style="font-size:13px;color:#aaa;margin-top:8px;text-decoration:none;">Mot de passe oublié ?</button>
       <button class="link-btn" id="l-toggle">Pas encore de compte ? Créer un compte</button>
     </div>
   </div>
@@ -421,6 +423,7 @@ input:focus, select:focus { outline: none; border-color: #7F77DD; background: #f
       <div id="modal-conge-admin-body" style="font-size:14px;color:#555;margin-bottom:1rem;line-height:1.6;"></div>
       <div class="modal-actions">
         <button class="btn-secondary" onclick="closeModal()">Fermer</button>
+        <button class="btn-sm btn-danger" id="conge-delete" style="padding:10px 12px;">Supprimer</button>
         <button class="btn-primary" style="background:#E24B4A;" id="conge-refuse">Refuser</button>
         <button class="btn-primary" style="background:#1D9E75;" id="conge-approve">Valider</button>
       </div>
@@ -500,10 +503,45 @@ function toLocalDatetime(isoStr) {
 document.getElementById('l-toggle').addEventListener('click', () => show('s-register'));
 document.getElementById('r-toggle').addEventListener('click', () => show('s-login'));
 
+document.getElementById('l-forgot').addEventListener('click', async () => {
+  const email = document.getElementById('l-email').value.trim();
+  const errEl = document.getElementById('l-err');
+  const successEl = document.getElementById('l-success');
+  errEl.textContent = '';
+  successEl.textContent = '';
+  if (!email) { errEl.textContent = 'Veuillez entrer votre adresse email.'; return; }
+  try {
+    await auth.sendPasswordResetEmail(email);
+    successEl.textContent = '✓ Email de réinitialisation envoyé à ' + email;
+  } catch(e) {
+    if (e.code === 'auth/user-not-found') {
+      errEl.textContent = 'Aucun compte trouvé avec cet email.';
+    } else {
+      errEl.textContent = 'Erreur : ' + e.message;
+    }
+  }
+});
+
+document.getElementById('l-forgot').addEventListener('click', async () => {
+  const email = document.getElementById('l-email').value.trim();
+  const errEl = document.getElementById('l-err');
+  const successEl = document.getElementById('l-success');
+  errEl.textContent = '';
+  successEl.textContent = '';
+  if (!email) { errEl.textContent = 'Entrez votre email ci-dessus puis cliquez ici.'; return; }
+  try {
+    await auth.sendPasswordResetEmail(email);
+    successEl.textContent = '✓ Email envoyé à ' + email + ' — vérifiez vos spams !';
+  } catch(e) {
+    errEl.textContent = e.code === 'auth/user-not-found' ? 'Aucun compte trouvé avec cet email.' : 'Erreur : ' + e.message;
+  }
+});
+
 document.getElementById('l-btn').addEventListener('click', async () => {
   const email = document.getElementById('l-email').value.trim();
   const pass = document.getElementById('l-pass').value;
   document.getElementById('l-err').textContent = '';
+  document.getElementById('l-success').textContent = '';
   if (!email || !pass) { document.getElementById('l-err').textContent = 'Veuillez remplir tous les champs.'; return; }
   try { await auth.signInWithEmailAndPassword(email, pass); }
   catch(e) { document.getElementById('l-err').textContent = 'Email ou mot de passe incorrect.'; }
@@ -1669,17 +1707,20 @@ window.openAdminConge = (id) => {
     const c = d.data();
     const startFr = new Date(c.start).toLocaleDateString('fr-FR', {day:'2-digit', month:'long', year:'numeric'});
     const endFr = new Date(c.end).toLocaleDateString('fr-FR', {day:'2-digit', month:'long', year:'numeric'});
+    const dureeLabel = c.duree === 'half_am' ? 'Demi-journée matin' : (c.duree === 'half_pm' ? 'Demi-journée après-midi' : c.days + ' jour' + (c.days > 1 ? 's' : '') + ' ouvré' + (c.days > 1 ? 's' : ''));
     document.getElementById('modal-conge-admin-title').textContent = 'Demande de ' + c.userName;
-    const statusFr = { pending: 'En attente', approved: 'Valide', refused: 'Refuse' }[c.status];
+    const statusFr = { pending: 'En attente', approved: 'Validé', refused: 'Refusé' }[c.status];
+    const impactStr = c.type === 'rtt' && c.hoursImpact ? '<br><b>Impact solde :</b> <span style="color:#E24B4A;">−' + formatDuration(c.hoursImpact) + '</span>' : '';
     document.getElementById('modal-conge-admin-body').innerHTML =
       '<b>Type :</b> ' + CONGE_LABELS[c.type] + '<br>' +
-      '<b>Periode :</b> ' + startFr + ' au ' + endFr + '<br>' +
-      '<b>Duree :</b> ' + c.days + ' jour' + (c.days > 1 ? 's' : '') + ' ouvre' + (c.days > 1 ? 's' : '') + '<br>' +
+      '<b>Période :</b> ' + startFr + (startFr !== endFr ? ' au ' + endFr : '') + '<br>' +
+      '<b>Durée :</b> ' + dureeLabel + '<br>' +
       (c.comment ? '<b>Commentaire :</b> ' + c.comment + '<br>' : '') +
-      '<b>Statut :</b> ' + statusFr;
+      '<b>Statut :</b> ' + statusFr + impactStr;
     const isPending = c.status === 'pending';
     document.getElementById('conge-approve').style.display = isPending ? '' : 'none';
     document.getElementById('conge-refuse').style.display = isPending ? '' : 'none';
+    document.getElementById('conge-delete').style.display = '';
     document.getElementById('modal-conge-admin').style.display = 'flex';
   });
 };
@@ -1692,6 +1733,14 @@ document.getElementById('conge-approve').addEventListener('click', async () => {
 document.getElementById('conge-refuse').addEventListener('click', async () => {
   await db.collection('conges').doc(currentCongeId).update({ status: 'refused' });
   closeModal();
+});
+
+document.getElementById('conge-delete').addEventListener('click', async () => {
+  if (!confirm('Supprimer définitivement cette demande ?')) return;
+  try {
+    await db.collection('conges').doc(currentCongeId).delete();
+    closeModal();
+  } catch(e) { alert('Erreur : ' + e.message); }
 });
 
 // =============================================
