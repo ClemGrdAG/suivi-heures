@@ -1156,7 +1156,7 @@ async function renderWeeklyRecap() {
       .where('endTime', '>=', START_DATE.toISOString())
       .get();
 
-    const entries = snap.docs.map(d => d.data());
+    const entries = filteredDocs.map(d => d.data()).sort((a,b) => a.endTime.localeCompare(b.endTime));
 
     // Grouper par semaine
     const weeks = {};
@@ -1908,13 +1908,13 @@ document.getElementById('btn-export-excel').addEventListener('click', async () =
     const fromDate = new Date(fromVal + 'T00:00:00');
     const toDate = new Date(toVal + 'T23:59:59');
 
-    // Récupérer les pointages sur la période
+    // Récupérer les pointages sur la période (filtre côté JS pour éviter index composite)
     const snap = await db.collection('pointages')
       .where('userId', '==', CU.uid)
       .where('endTime', '>=', fromDate.toISOString())
-      .where('endTime', '<=', toDate.toISOString())
-      .orderBy('endTime', 'asc')
       .get();
+    // Filtrer la borne supérieure côté JS
+    const filteredDocs = snap.docs.filter(d => d.data().endTime <= toDate.toISOString());
 
     // Récupérer les congés validés sur la période
     const congesSnap = await db.collection('conges')
