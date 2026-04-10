@@ -1955,7 +1955,7 @@ document.getElementById('btn-export-excel').addEventListener('click', async () =
     const toFr = new Date(toVal).toLocaleDateString('fr-FR', {day:'2-digit',month:'long',year:'numeric'});
 
     // En-tête du document
-    rows.push(['"Récapitulatif d'heures"', '"' + name + '"', '', '', '"Période : ' + fromFr + ' au ' + toFr + '"']);
+    rows.push(['"Recapitulatif heures"', '"' + name + '"', '', '', '"Periode : ' + fromFr + ' au ' + toFr + '"']);
     rows.push(['', '', '', '', '']);
 
     // Pointages semaine par semaine
