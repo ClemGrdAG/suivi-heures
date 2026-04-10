@@ -909,7 +909,7 @@ function listenTeam() {
   if (unsubTeam) unsubTeam();
   try {
     if (isAdmin) {
-      // Admin : croiser users + badges pour afficher tout le monde avec le bon nom
+      // Admin : croiser users + badges + solde pour afficher tout le monde
       unsubTeam = db.collection('badges').onSnapshot(async snap => {
         const el = document.getElementById('team-list');
         const badgesMap = {};
@@ -919,10 +919,14 @@ function listenTeam() {
         const usersSnap = await db.collection('users').where('active', '==', true).get();
         if (usersSnap.empty) { el.innerHTML = '<div class="empty-state">Aucun membre enregistré</div>'; return; }
 
+        // S'assurer que les soldes sont à jour
+        if (!Object.keys(employeesSolde).length) await computeAllSoldes();
+
         const members = usersSnap.docs.map(d => {
           const user = d.data();
           const badge = badgesMap[d.id] || {};
           return {
+            uid: d.id,
             name: user.name || user.email || 'Inconnu',
             team: user.team || 'sedentaire',
             active: badge.active || false,
@@ -934,11 +938,18 @@ function listenTeam() {
         el.innerHTML = members.map(m => {
           const ini = m.name.split(' ').map(n=>n[0]).join('').toUpperCase().slice(0,2);
           const since = m.startTime ? new Date(m.startTime).toLocaleTimeString('fr-FR',{hour:'2-digit',minute:'2-digit'}) : '';
+          const solde = employeesSolde[m.uid] || 0;
+          const soldeStr = formatSolde(solde);
+          const soldeColor = solde >= 0 ? '#0F6E56' : '#A32D2D';
+          const soldeBg = solde >= 0 ? '#E1F5EE' : '#FDEAEA';
           return '<div class="team-row">' +
             '<div class="avatar ' + (m.active?'':'inactive') + '">' + ini + '</div>' +
             '<div style="flex:1"><div class="emp-name">' + m.name + '</div>' +
             '<div class="emp-sub">' + (m.active ? '⏱ Depuis ' + since : 'Absent') + ' · ' + (m.team==='itinerant'?'Itinérant':'Sédentaire') + '</div></div>' +
+            '<div style="display:flex;flex-direction:column;align-items:flex-end;gap:4px;">' +
             '<span class="sbadge ' + (m.active?'s-present':'s-absent') + '">' + (m.active?'Présent':'Absent') + '</span>' +
+            '<span style="font-size:11px;font-weight:600;padding:2px 7px;border-radius:8px;background:' + soldeBg + ';color:' + soldeColor + ';">' + soldeStr + '</span>' +
+            '</div>' +
             '</div>';
         }).join('');
       });
