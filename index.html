@@ -239,6 +239,7 @@ input:focus, select:focus { outline: none; border-color: var(--ag-gold); backgro
 
     <!-- Badgeage -->
     <div id="tab-badge" class="tab active">
+      <div id="horaire-alert" style="display:none;background:#FDEAEA;border:1px solid #E24B4A;border-radius:10px;padding:12px 14px;margin-bottom:12px;font-size:13px;color:#A32D2D;"></div>
       <div class="badge-center">
         <button class="badge-btn" id="badge-btn">
           <span class="badge-icon" id="badge-icon">▶</span>
@@ -257,6 +258,19 @@ input:focus, select:focus { outline: none; border-color: var(--ag-gold); backgro
 
     <!-- Historique -->
     <div id="tab-history" class="tab">
+      <div class="card" style="margin-bottom:10px;">
+        <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;">
+          <div style="flex:1;min-width:120px;">
+            <div style="font-size:11px;color:#aaa;margin-bottom:4px;text-transform:uppercase;letter-spacing:0.5px;">Du</div>
+            <input type="date" id="export-from" style="margin-bottom:0;width:100%;" />
+          </div>
+          <div style="flex:1;min-width:120px;">
+            <div style="font-size:11px;color:#aaa;margin-bottom:4px;text-transform:uppercase;letter-spacing:0.5px;">Au</div>
+            <input type="date" id="export-to" style="margin-bottom:0;width:100%;" />
+          </div>
+          <button id="btn-export-excel" style="background:var(--ag-navy);color:var(--ag-gold);border:none;padding:10px 16px;border-radius:10px;font-size:13px;font-weight:600;cursor:pointer;font-family:inherit;white-space:nowrap;margin-top:18px;">⬇ Export Excel</button>
+        </div>
+      </div>
       <div class="card" id="hist-list"><div class="loader">Chargement...</div></div>
     </div>
 
@@ -685,6 +699,39 @@ async function checkBadge() {
   } catch(e) { console.error(e); }
 }
 
+// Vérification des horaires flexibles
+// Règles : arrivée avant 10h, départ à partir de 15h30
+function checkHoraires(type, time) {
+  const h = time.getHours();
+  const m = time.getMinutes();
+  const totalMins = h * 60 + m;
+  const violations = [];
+
+  if (type === 'in') {
+    // Arrivée après 10h00
+    if (totalMins > 10 * 60) {
+      violations.push('Arrivée tardive — vous devez être arrivé avant 10h00.');
+    }
+  }
+  if (type === 'out') {
+    // Départ avant 15h30
+    if (totalMins < 15 * 60 + 30) {
+      violations.push('Départ trop tôt — départ possible à partir de 15h30.');
+    }
+  }
+  return violations;
+}
+
+function showHoraireAlert(msg, isWarning) {
+  const el = document.getElementById('horaire-alert');
+  if (!msg) { el.style.display = 'none'; return; }
+  el.style.display = 'block';
+  el.style.background = isWarning ? '#FAEEDA' : '#FDEAEA';
+  el.style.borderColor = isWarning ? '#854F0B' : '#E24B4A';
+  el.style.color = isWarning ? '#854F0B' : '#A32D2D';
+  el.innerHTML = '⚠ ' + msg;
+}
+
 document.getElementById('badge-btn').addEventListener('click', async () => {
   const now = new Date();
   const isItinerant = UP?.team === 'itinerant';
@@ -702,11 +749,22 @@ document.getElementById('badge-btn').addEventListener('click', async () => {
 
   if (!isBadged) {
     isBadged = true; badgeTime = now.toISOString();
+    // Vérification horaire arrivée
+    const inViolations = checkHoraires('in', now);
+    const inAlert = inViolations.length > 0 ? inViolations[0] : null;
+    if (inAlert) {
+      showHoraireAlert(inAlert, true);
+    } else {
+      showHoraireAlert('', false);
+    }
     try {
       await db.collection('badges').doc(CU.uid).set({
         active: true, startTime: badgeTime,
         userId: CU.uid, userName: UP?.name || CU.email,
-        team: UP?.team || 'sedentaire', geo: geo || null
+        team: UP?.team || 'sedentaire', geo: geo || null,
+        alert: inAlert || null,
+        lastAlert: inAlert || null,
+        lastAlertTime: inAlert ? now.toISOString() : null
       });
       startTimer(); updateBadgeUI(true);
     } catch(e) { isBadged = false; badgeTime = null; alert('Erreur de connexion.'); }
@@ -720,6 +778,17 @@ document.getElementById('badge-btn').addEventListener('click', async () => {
         );
       });
     }
+
+    // Vérification horaire départ
+    const violations = checkHoraires('out', now);
+    let alertMsg = null;
+    if (violations.length > 0) {
+      alertMsg = violations[0];
+      showHoraireAlert(alertMsg + ' Le pointage a quand même été enregistré.', true);
+    } else {
+      showHoraireAlert('', false);
+    }
+
     const roundedStart = roundToQuarter(new Date(badgeTime));
     const roundedEnd = roundToQuarter(now);
     const dur = (roundedEnd - roundedStart) / 3600000;
@@ -729,13 +798,20 @@ document.getElementById('badge-btn').addEventListener('click', async () => {
         startTime: roundedStart.toISOString(), endTime: roundedEnd.toISOString(),
         duration: dur, geo: geo || null,
         team: UP?.team || 'sedentaire',
-        date: roundedEnd.toISOString().split('T')[0]
+        date: roundedEnd.toISOString().split('T')[0],
+        alert: alertMsg || null
       });
-      await db.collection('badges').doc(CU.uid).set({ active: false, userId: CU.uid });
+      // Enregistrer l'alerte dans le badge pour que l'admin la voie
+      await db.collection('badges').doc(CU.uid).set({
+        active: false, userId: CU.uid,
+        userName: UP?.name || CU.email,
+        team: UP?.team || 'sedentaire',
+        lastAlert: alertMsg || null,
+        lastAlertTime: alertMsg ? now.toISOString() : null
+      });
       isBadged = false; badgeTime = null; geo = null;
       clearInterval(timerInt);
       document.getElementById('timer').textContent = '00:00:00';
-      // Réinitialiser le bouton geo
       const geoEl = document.getElementById('geo-txt');
       geoEl.textContent = '';
       geoEl.style.color = '';
@@ -947,7 +1023,9 @@ function listenTeam() {
             name: user.name || user.email || 'Inconnu',
             team: user.team || 'sedentaire',
             active: badge.active || false,
-            startTime: badge.startTime || null
+            startTime: badge.startTime || null,
+            lastAlert: badge.lastAlert || null,
+            lastAlertTime: badge.lastAlertTime || null
           };
         });
 
@@ -959,10 +1037,15 @@ function listenTeam() {
           const soldeStr = formatSolde(solde);
           const soldeColor = solde >= 0 ? '#0F6E56' : '#A32D2D';
           const soldeBg = solde >= 0 ? '#E1F5EE' : '#FDEAEA';
-          return '<div class="team-row">' +
+          const hasAlert = m.lastAlert && m.lastAlertTime;
+          const alertBadge = hasAlert
+            ? '<div style="font-size:11px;color:#A32D2D;background:#FDEAEA;border-radius:6px;padding:2px 7px;margin-top:3px;font-weight:500;">⚠ ' + m.lastAlert + '</div>'
+            : '';
+          return '<div class="team-row" style="' + (hasAlert ? 'border-left:3px solid #E24B4A;padding-left:8px;' : '') + '">' +
             '<div class="avatar ' + (m.active?'':'inactive') + '">' + ini + '</div>' +
             '<div style="flex:1"><div class="emp-name">' + m.name + '</div>' +
-            '<div class="emp-sub">' + (m.active ? '⏱ Depuis ' + since : 'Absent') + ' · ' + (m.team==='itinerant'?'Itinérant':'Sédentaire') + '</div></div>' +
+            '<div class="emp-sub">' + (m.active ? '⏱ Depuis ' + since : 'Absent') + ' · ' + (m.team==='itinerant'?'Itinérant':'Sédentaire') + '</div>' +
+            alertBadge + '</div>' +
             '<div style="display:flex;flex-direction:column;align-items:flex-end;gap:4px;">' +
             '<span class="sbadge ' + (m.active?'s-present':'s-absent') + '">' + (m.active?'Présent':'Absent') + '</span>' +
             '<span style="font-size:11px;font-weight:600;padding:2px 7px;border-radius:8px;background:' + soldeBg + ';color:' + soldeColor + ';">' + soldeStr + '</span>' +
@@ -1207,9 +1290,10 @@ function renderAllPointages() {
     const dateStr = end.toLocaleDateString('fr-FR',{weekday:'short',day:'2-digit',month:'2-digit',year:'2-digit'});
     const s = new Date(e.startTime).toLocaleTimeString('fr-FR',{hour:'2-digit',minute:'2-digit'});
     const en = end.toLocaleTimeString('fr-FR',{hour:'2-digit',minute:'2-digit'});
-    return `<div class="pointage-row">
+    const alertIcon = e.alert ? '<span style="font-size:11px;color:#A32D2D;background:#FDEAEA;border-radius:5px;padding:1px 6px;margin-left:6px;">⚠ ' + e.alert + '</span>' : '';
+    return `<div class="pointage-row" style="${e.alert ? 'border-left:3px solid #E24B4A;padding-left:8px;' : ''}">
       <div class="pointage-info">
-        <div class="pointage-name">${e.userName || 'Inconnu'}</div>
+        <div class="pointage-name">${e.userName || 'Inconnu'}${alertIcon}</div>
         <div class="pointage-detail">${dateStr} · ${s} → ${en} <span class="h-dur" style="margin-left:4px">${formatDuration(e.duration)}</span></div>
       </div>
       <div style="display:flex;gap:5px;flex-shrink:0">
@@ -1801,6 +1885,159 @@ document.getElementById('solde-save').addEventListener('click', async () => {
 });
 
 // =============================================
+// EXPORT EXCEL SALARIÉ
+// =============================================
+function initExportDates() {
+  const now = new Date();
+  const firstDay = new Date(now.getFullYear(), now.getMonth(), 1);
+  document.getElementById('export-from').value = firstDay.toISOString().split('T')[0];
+  document.getElementById('export-to').value = now.toISOString().split('T')[0];
+}
+
+document.getElementById('btn-export-excel').addEventListener('click', async () => {
+  const fromVal = document.getElementById('export-from').value;
+  const toVal = document.getElementById('export-to').value;
+  if (!fromVal || !toVal) { alert('Veuillez sélectionner une période.'); return; }
+  if (toVal < fromVal) { alert('La date de fin doit être après la date de début.'); return; }
+
+  const btn = document.getElementById('btn-export-excel');
+  btn.textContent = '⏳ Génération...';
+  btn.disabled = true;
+
+  try {
+    const fromDate = new Date(fromVal + 'T00:00:00');
+    const toDate = new Date(toVal + 'T23:59:59');
+
+    // Récupérer les pointages sur la période
+    const snap = await db.collection('pointages')
+      .where('userId', '==', CU.uid)
+      .where('endTime', '>=', fromDate.toISOString())
+      .where('endTime', '<=', toDate.toISOString())
+      .orderBy('endTime', 'asc')
+      .get();
+
+    // Récupérer les congés validés sur la période
+    const congesSnap = await db.collection('conges')
+      .where('userId', '==', CU.uid)
+      .where('status', '==', 'approved')
+      .where('start', '>=', fromVal)
+      .where('start', '<=', toVal)
+      .get();
+
+    const entries = snap.docs.map(d => d.data());
+    const conges = congesSnap.docs.map(d => d.data());
+
+    if (!entries.length && !conges.length) {
+      alert('Aucune donnée sur cette période.');
+      return;
+    }
+
+    // Grouper par semaine
+    const weeks = {};
+    entries.forEach(e => {
+      const d = new Date(e.endTime);
+      const wd = d.getDay() || 7;
+      const mon = new Date(d); mon.setDate(d.getDate()-wd+1); mon.setHours(0,0,0,0);
+      const wk = mon.toISOString().split('T')[0];
+      if (!weeks[wk]) weeks[wk] = { mon, days: {}, total: 0 };
+      const day = d.toISOString().split('T')[0];
+      if (!weeks[wk].days[day]) weeks[wk].days[day] = { entries: [], total: 0 };
+      weeks[wk].days[day].entries.push(e);
+      weeks[wk].days[day].total += e.duration;
+      weeks[wk].total += e.duration;
+    });
+
+    // Construire le CSV (compatible Excel)
+    const sep = ';';
+    const rows = [];
+    const name = UP?.name || CU.email;
+    const fromFr = new Date(fromVal).toLocaleDateString('fr-FR', {day:'2-digit',month:'long',year:'numeric'});
+    const toFr = new Date(toVal).toLocaleDateString('fr-FR', {day:'2-digit',month:'long',year:'numeric'});
+
+    // En-tête du document
+    rows.push(['"Récapitulatif d'heures"', '"' + name + '"', '', '', '"Période : ' + fromFr + ' au ' + toFr + '"']);
+    rows.push(['', '', '', '', '']);
+
+    // Pointages semaine par semaine
+    const sortedWeeks = Object.entries(weeks).sort((a,b) => a[0].localeCompare(b[0]));
+    let grandTotal = 0;
+
+    sortedWeeks.forEach(([wk, w]) => {
+      const fri = new Date(w.mon); fri.setDate(w.mon.getDate()+4);
+      const wkLabel = 'Semaine du ' + w.mon.toLocaleDateString('fr-FR',{day:'2-digit',month:'2-digit'}) + ' au ' + fri.toLocaleDateString('fr-FR',{day:'2-digit',month:'2-digit'});
+      rows.push(['"' + wkLabel + '"', '', '', '', '']);
+      rows.push(['"Date"', '"Jour"', '"Arrivée"', '"Départ"', '"Durée"', '"Matin/AM"', '"Alerte"']);
+
+      Object.entries(w.days).sort((a,b) => a[0].localeCompare(b[0])).forEach(([day, d]) => {
+        d.entries.forEach(e => {
+          const start = new Date(e.startTime);
+          const end = new Date(e.endTime);
+          const dateFr = start.toLocaleDateString('fr-FR', {day:'2-digit',month:'2-digit',year:'numeric'});
+          const jourFr = start.toLocaleDateString('fr-FR', {weekday:'long'});
+          const startH = start.toLocaleTimeString('fr-FR', {hour:'2-digit',minute:'2-digit'});
+          const endH = end.toLocaleTimeString('fr-FR', {hour:'2-digit',minute:'2-digit'});
+          const period = start.getHours() < 12 ? 'Matin' : 'Après-midi';
+          rows.push([
+            '"' + dateFr + '"',
+            '"' + jourFr.charAt(0).toUpperCase() + jourFr.slice(1) + '"',
+            '"' + startH + '"',
+            '"' + endH + '"',
+            '"' + formatDuration(e.duration) + '"',
+            '"' + period + '"',
+            '"' + (e.alert || '') + '"'
+          ]);
+        });
+        rows.push(['"Total ' + new Date(day).toLocaleDateString('fr-FR',{weekday:'long',day:'2-digit',month:'2-digit'}) + '"', '', '', '', '"' + formatDuration(d.total) + '"', '', '']);
+      });
+
+      const delta = w.total - 35;
+      rows.push(['"TOTAL SEMAINE"', '', '', '', '"' + formatDuration(w.total) + '"', '"Objectif 35h"', '"' + formatSolde(delta) + '"']);
+      rows.push(['', '', '', '', '', '', '']);
+      grandTotal += w.total;
+    });
+
+    // Total général
+    rows.push(['"TOTAL PÉRIODE"', '', '', '', '"' + formatDuration(grandTotal) + '"', '', '']);
+    rows.push(['', '', '', '', '', '', '']);
+
+    // Congés validés
+    if (conges.length > 0) {
+      rows.push(['"ABSENCES ET CONGÉS VALIDÉS"', '', '', '', '', '', '']);
+      rows.push(['"Type"', '"Début"', '"Fin"', '"Durée"', '"Impact solde"', '"Commentaire"', '']);
+      const typeLabel = { cp: 'Congés payés', rtt: 'Récup', maladie: 'Maladie', autre: 'Autre' };
+      const dureeLabel = d => d.duree === 'half_am' ? 'Demi-journée matin' : (d.duree === 'half_pm' ? 'Demi-journée après-midi' : d.days + ' jour' + (d.days > 1 ? 's' : ''));
+      conges.forEach(c => {
+        rows.push([
+          '"' + (typeLabel[c.type] || c.type) + '"',
+          '"' + new Date(c.start).toLocaleDateString('fr-FR') + '"',
+          '"' + new Date(c.end).toLocaleDateString('fr-FR') + '"',
+          '"' + dureeLabel(c) + '"',
+          '"' + (c.hoursImpact ? '-' + formatDuration(c.hoursImpact) : '-') + '"',
+          '"' + (c.comment || '') + '"',
+          ''
+        ]);
+      });
+    }
+
+    const csv = rows.map(r => r.join(sep)).join('\n');
+    const blob = new Blob(['\uFEFF' + csv], { type: 'text/csv;charset=utf-8' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = 'recapitulatif_' + name.replace(/ /g,'_') + '_' + fromVal + '_' + toVal + '.csv';
+    a.click();
+    URL.revokeObjectURL(url);
+
+  } catch(e) {
+    alert('Erreur : ' + e.message);
+    console.error(e);
+  } finally {
+    btn.textContent = '⬇ Export Excel';
+    btn.disabled = false;
+  }
+});
+
+// =============================================
 // NAVIGATION
 // =============================================
 function switchTab(btn) {
@@ -1809,6 +2046,7 @@ function switchTab(btn) {
   btn.classList.add('active');
   document.getElementById('tab-'+btn.dataset.tab).classList.add('active');
   if (btn.dataset.tab === 'profile') renderStats();
+  if (btn.dataset.tab === 'history' && !isAdmin) initExportDates();
   if (btn.dataset.tab === 'conges') listenMyConges();
   if (btn.dataset.tab === 'admin-conges') listenAllConges();
 }
