@@ -823,7 +823,7 @@ async function renderWeek() {
     const mx = Math.max(...hrs,8);
     document.getElementById('week-grid').innerHTML = DAYS.map((d,i) => {
       const h=hrs[i], p=Math.round((h/mx)*100);
-      return `<div class="day-cell"><div class="day-lbl">${d}</div><div class="day-bar-wrap"><div class="day-bar" style="height:${p}%"></div></div><div class="day-h">${h.toFixed(1)}h</div></div>`;
+      return `<div class="day-cell"><div class="day-lbl">${d}</div><div class="day-bar-wrap"><div class="day-bar" style="height:${p}%"></div></div><div class="day-h">${formatDuration(h)}</div></div>`;
     }).join('');
   } catch(e) { console.error(e); }
 }
@@ -1021,7 +1021,7 @@ async function updateAdminStats() {
     const mStart = new Date(); mStart.setDate(1); mStart.setHours(0,0,0,0);
     const pSnap = await db.collection('pointages').where('endTime','>=',mStart.toISOString()).get();
     const totalH = pSnap.docs.reduce((a,d) => a + (d.data().duration||0), 0);
-    document.getElementById('a-hours').textContent = totalH.toFixed(0)+'h';
+    document.getElementById('a-hours').textContent = formatDuration(totalH);
   } catch(e) { console.error(e); }
 }
 
