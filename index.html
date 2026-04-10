@@ -1539,7 +1539,7 @@ function updateCongeForm() {
       recap.style.display = 'block';
       const impactStr = type === 'rtt'
         ? '<span style="color:#E24B4A;font-weight:600;">−' + formatDuration(hoursImpact) + ' déduites du compteur</span>'
-        : '<span style="color:#666;">Pas d'impact sur le compteur d'heures</span>';
+        : '<span style="color:#666;">Pas d&#39;impact sur le compteur d&#39;heures</span>';
       recap.innerHTML = (daysCount > 0 ? '<b>' + (daysCount % 1 === 0 ? daysCount : '½') + ' jour' + (daysCount > 1 ? 's' : '') + '</b> · ' : '') + impactStr;
     } else {
       recap.style.display = 'none';
