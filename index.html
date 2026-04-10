@@ -1156,7 +1156,7 @@ async function renderWeeklyRecap() {
       .where('endTime', '>=', START_DATE.toISOString())
       .get();
 
-    const entries = filteredDocs.map(d => d.data()).sort((a,b) => a.endTime.localeCompare(b.endTime));
+    const entries = snap.docs.map(d => d.data());
 
     // Grouper par semaine
     const weeks = {};
@@ -1918,16 +1918,15 @@ document.getElementById('btn-export-excel').addEventListener('click', async () =
       return t >= fromDate.toISOString() && t <= toDate.toISOString();
     });
 
-    // Récupérer les congés validés sur la période
+    // Récupérer tous les congés du salarié, filtrer côté JS
     const congesSnap = await db.collection('conges')
       .where('userId', '==', CU.uid)
-      .where('status', '==', 'approved')
-      .where('start', '>=', fromVal)
-      .where('start', '<=', toVal)
       .get();
 
-    const entries = snap.docs.map(d => d.data());
-    const conges = congesSnap.docs.map(d => d.data());
+    const entries = filteredDocs.map(d => d.data()).sort((a,b) => a.endTime.localeCompare(b.endTime));
+    const conges = congesSnap.docs
+      .map(d => d.data())
+      .filter(c => c.status === 'approved' && c.start >= fromVal && c.start <= toVal);
 
     if (!entries.length && !conges.length) {
       alert('Aucune donnée sur cette période.');
