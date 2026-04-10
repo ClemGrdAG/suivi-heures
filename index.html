@@ -1908,13 +1908,15 @@ document.getElementById('btn-export-excel').addEventListener('click', async () =
     const fromDate = new Date(fromVal + 'T00:00:00');
     const toDate = new Date(toVal + 'T23:59:59');
 
-    // Récupérer les pointages sur la période (filtre côté JS pour éviter index composite)
+    // Récupérer TOUS les pointages du salarié puis filtrer côté JS
     const snap = await db.collection('pointages')
       .where('userId', '==', CU.uid)
-      .where('endTime', '>=', fromDate.toISOString())
       .get();
-    // Filtrer la borne supérieure côté JS
-    const filteredDocs = snap.docs.filter(d => d.data().endTime <= toDate.toISOString());
+    // Filtrer la période entièrement côté navigateur
+    const filteredDocs = snap.docs.filter(d => {
+      const t = d.data().endTime;
+      return t >= fromDate.toISOString() && t <= toDate.toISOString();
+    });
 
     // Récupérer les congés validés sur la période
     const congesSnap = await db.collection('conges')
