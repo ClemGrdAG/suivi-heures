@@ -534,17 +534,24 @@ auth.onAuthStateChanged(async user => {
       addAdminTabs();
     }
     await loadProfile();
-    await checkBadge();
-    listenHistory();
-    listenTeam();
-    renderWeek();
-    renderStats();
-    addCongesTabToNav();
-    if (isAdmin) {
+    if (!isAdmin) {
+      await checkBadge();
+      listenHistory();
+      renderWeek();
+      renderStats();
+      addCongesTabToNav();
+    } else {
+      // Admin : masquer les onglets salarié inutiles
+      ['badge','history','profile'].forEach(t => {
+        const btn = document.querySelector('[data-tab="' + t + '"]');
+        if (btn) btn.style.display = 'none';
+      });
       listenAllPointages();
       listenEmployees();
       updateAdminStats();
+      setTimeout(setDefaultAdminTab, 100);
     }
+    listenTeam();
   } else {
     CU = null; UP = null; isAdmin = false;
     show('s-login');
@@ -739,21 +746,99 @@ function listenHistory() {
         el.innerHTML = '<div class="empty-state">Aucun pointage enregistré.<br><small>Pointez une arrivée puis un départ pour voir l\'historique.</small></div>';
         return;
       }
-      el.innerHTML = snap.docs.slice(0,30).map(d => {
-        const e = d.data();
-        const end = new Date(e.endTime);
-        const dateStr = end.toLocaleDateString('fr-FR',{weekday:'short',day:'2-digit',month:'2-digit'});
-        const s = new Date(e.startTime).toLocaleTimeString('fr-FR',{hour:'2-digit',minute:'2-digit'});
-        const en = end.toLocaleTimeString('fr-FR',{hour:'2-digit',minute:'2-digit'});
-        const loc = e.geo ? '📍 '+e.geo.lat+', '+e.geo.lng : 'Position non enregistrée';
-        return `<div class="h-item">
-          <div style="flex:1">
-            <div class="h-main"><span class="h-dot dot-in"></span>${s}<span style="color:#ccc;margin:0 4px">→</span><span class="h-dot dot-out"></span>${en}<span class="h-dur">${formatDuration(e.duration)}</span></div>
-            <div class="h-sub">${loc}</div>
-          </div>
-          <div class="h-date">${dateStr}</div>
-        </div>`;
-      }).join('');
+      const entries = snap.docs.map(d => d.data()).slice(0,60);
+
+      // Calculer le cumul de la semaine en cours
+      const now2 = new Date();
+      const dow = now2.getDay() || 7;
+      const monDate = new Date(now2); monDate.setDate(now2.getDate() - dow + 1); monDate.setHours(0,0,0,0);
+
+      // Grouper par semaine pour cumul
+      const weekCumul = {};
+      entries.forEach(e => {
+        const d = new Date(e.endTime);
+        const wd2 = d.getDay() || 7;
+        const m2 = new Date(d); m2.setDate(d.getDate() - wd2 + 1); m2.setHours(0,0,0,0);
+        const wk = m2.toISOString().split('T')[0];
+        if (!weekCumul[wk]) weekCumul[wk] = { total: 0, mon: m2 };
+        weekCumul[wk].total += e.duration;
+      });
+
+      // Trier les entrées par date desc, grouper par semaine
+      const weekKeys = Object.keys(weekCumul).sort((a,b) => b.localeCompare(a));
+      let html = '';
+
+      weekKeys.forEach(wk => {
+        const wkEntries = entries.filter(e => {
+          const d = new Date(e.endTime);
+          const wd2 = d.getDay() || 7;
+          const m2 = new Date(d); m2.setDate(d.getDate() - wd2 + 1); m2.setHours(0,0,0,0);
+          return m2.toISOString().split('T')[0] === wk;
+        }).sort((a,b) => new Date(b.endTime) - new Date(a.endTime));
+
+        const wkMon = weekCumul[wk].mon;
+        const wkFri = new Date(wkMon); wkFri.setDate(wkMon.getDate() + 4);
+        const wkTotal = weekCumul[wk].total;
+        const wkColor = wkTotal >= 35 ? '#1D9E75' : '#E24B4A';
+        const wkPct = Math.min(Math.round((wkTotal / 35) * 100), 100);
+        const isCurrentWeek = wk >= monDate.toISOString().split('T')[0];
+
+        // En-tête de semaine
+        html += '<div style="background:#f7f7fb;border-radius:10px;padding:10px 12px;margin-bottom:6px;margin-top:8px;">' +
+          '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:4px;">' +
+          '<span style="font-size:12px;font-weight:600;color:#534AB7;">Semaine du ' +
+          wkMon.toLocaleDateString('fr-FR',{day:'2-digit',month:'2-digit'}) + ' au ' +
+          wkFri.toLocaleDateString('fr-FR',{day:'2-digit',month:'2-digit'}) +
+          (isCurrentWeek ? ' <span style="font-size:10px;background:#EEEDFE;color:#534AB7;padding:1px 6px;border-radius:6px;margin-left:4px;">En cours</span>' : '') +
+          '</span>' +
+          '<span style="font-size:13px;font-weight:700;color:' + wkColor + ';">Cumul : ' + formatDuration(wkTotal) + '</span>' +
+          '</div>' +
+          '<div style="height:4px;background:#e0e0e0;border-radius:2px;overflow:hidden;">' +
+          '<div style="height:100%;width:' + wkPct + '%;background:' + wkColor + ';border-radius:2px;"></div>' +
+          '</div>' +
+          '</div>';
+
+        // Entrées de la semaine
+        let runningTotal = 0;
+        const sortedWkEntries = [...wkEntries].sort((a,b) => new Date(a.endTime) - new Date(b.endTime));
+        sortedWkEntries.forEach(e => { runningTotal += e.duration; });
+        let cumul = 0;
+        [...wkEntries].reverse().forEach(e => {
+          const start = new Date(e.startTime);
+          const end = new Date(e.endTime);
+          const dateStr = end.toLocaleDateString('fr-FR',{weekday:'long',day:'2-digit',month:'2-digit'});
+          const startHour = start.getHours();
+          const period = startHour < 12 ? 'Matin' : (startHour < 14 ? 'Midi' : 'Après-midi');
+          const periodColor = startHour < 12 ? '#534AB7' : (startHour < 14 ? '#854F0B' : '#0F6E56');
+          const periodBg = startHour < 12 ? '#EEEDFE' : (startHour < 14 ? '#FAEEDA' : '#E1F5EE');
+          const s = start.toLocaleTimeString('fr-FR',{hour:'2-digit',minute:'2-digit'});
+          const en2 = end.toLocaleTimeString('fr-FR',{hour:'2-digit',minute:'2-digit'});
+          const loc = e.geo ? '📍 ' : '';
+          cumul += e.duration;
+
+          html += '<div class="h-item">' +
+            '<div style="flex:1">' +
+            '<div style="display:flex;align-items:center;gap:6px;margin-bottom:3px;">' +
+            '<span style="font-size:11px;font-weight:600;padding:1px 7px;border-radius:6px;background:' + periodBg + ';color:' + periodColor + ';">' + period + '</span>' +
+            '<span style="font-size:12px;color:#aaa;">' + dateStr + '</span>' +
+            '</div>' +
+            '<div class="h-main">' +
+            '<span class="h-dot dot-in"></span>' + s +
+            '<span style="color:#ccc;margin:0 4px">→</span>' +
+            '<span class="h-dot dot-out"></span>' + en2 +
+            '<span class="h-dur">' + formatDuration(e.duration) + '</span>' +
+            (loc ? '<span style="font-size:11px;color:#aaa;margin-left:4px;">📍</span>' : '') +
+            '</div>' +
+            '</div>' +
+            '<div style="text-align:right;">' +
+            '<div style="font-size:12px;font-weight:600;color:#534AB7;">+' + formatDuration(e.duration) + '</div>' +
+            '</div>' +
+            '</div>';
+        });
+        html += '<div style="height:1px;background:#eee;margin:4px 0 8px;"></div>';
+      });
+
+      el.innerHTML = html || '<div class="empty-state">Aucun pointage enregistré</div>';
     }, err => {
       el.innerHTML = '<div class="empty-state" style="color:#E24B4A">Erreur : ' + err.message + '</div>';
       console.error('Historique erreur:', err);
@@ -801,22 +886,35 @@ function listenTeam() {
         }).join('');
       });
     } else {
-      // Salarié : uniquement son propre statut
-      unsubTeam = db.collection('badges').where('userId', '==', CU.uid).onSnapshot(snap => {
+      // Salarié : voir tous les collègues avec présent/absent uniquement (sans heures)
+      unsubTeam = db.collection('badges').onSnapshot(async snap => {
         const el = document.getElementById('team-list');
-        const members = snap.docs.map(d => d.data()).filter(d => d.userId);
-        if (!members.length) {
-          el.innerHTML = "<div class='empty-state'>Aucun badgeage ce jour</div>";
-          return;
-        }
+        const badgesMap = {};
+        snap.docs.forEach(d => { badgesMap[d.id] = d.data(); });
+
+        const usersSnap = await db.collection('users').where('active', '==', true).get();
+        if (usersSnap.empty) { el.innerHTML = "<div class='empty-state'>Aucun collègue enregistré</div>"; return; }
+
+        const members = usersSnap.docs.map(d => {
+          const user = d.data();
+          const badge = badgesMap[d.id] || {};
+          return {
+            uid: d.id,
+            name: user.name || user.email || 'Inconnu',
+            team: user.team || 'sedentaire',
+            active: badge.active || false,
+            isSelf: d.id === CU.uid
+          };
+        });
+
+        members.sort((a,b) => (b.active?1:0)-(a.active?1:0) || a.name.localeCompare(b.name));
         el.innerHTML = members.map(m => {
-          const name = m.userName || 'Inconnu';
-          const ini = name.split(' ').map(n=>n[0]).join('').toUpperCase().slice(0,2);
-          const since = m.startTime ? new Date(m.startTime).toLocaleTimeString('fr-FR',{hour:'2-digit',minute:'2-digit'}) : '';
+          const ini = m.name.split(' ').map(n=>n[0]).join('').toUpperCase().slice(0,2);
+          const selfLabel = m.isSelf ? ' <span style="font-size:10px;color:#aaa;">(moi)</span>' : '';
           return '<div class="team-row">' +
             '<div class="avatar ' + (m.active?'':'inactive') + '">' + ini + '</div>' +
-            '<div style="flex:1"><div class="emp-name">' + name + '</div>' +
-            '<div class="emp-sub">' + (m.active ? '⏱ Depuis ' + since : 'Absent') + ' · ' + (m.team==='itinerant'?'Itinérant':'Sédentaire') + '</div></div>' +
+            '<div style="flex:1"><div class="emp-name">' + m.name + selfLabel + '</div>' +
+            '<div class="emp-sub">' + (m.team==='itinerant'?'Itinérant':'Sédentaire') + '</div></div>' +
             '<span class="sbadge ' + (m.active?'s-present':'s-absent') + '">' + (m.active?'Présent':'Absent') + '</span>' +
             '</div>';
         }).join('');
@@ -1546,6 +1644,11 @@ function switchTab(btn) {
   if (btn.dataset.tab === 'profile') renderStats();
   if (btn.dataset.tab === 'conges') listenMyConges();
   if (btn.dataset.tab === 'admin-conges') listenAllConges();
+}
+
+function setDefaultAdminTab() {
+  const managerBtn = document.querySelector('[data-tab="manager"]');
+  if (managerBtn) switchTab(managerBtn);
 }
 
 document.querySelectorAll('.nav-btn').forEach(btn => {
