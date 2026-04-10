@@ -385,16 +385,25 @@ input:focus, select:focus { outline: none; border-color: #7F77DD; background: #f
     <div class="modal">
       <h3>Nouvelle demande d'absence</h3>
       <label style="font-size:13px;color:#666;display:block;margin-bottom:4px">Type d'absence</label>
-      <select id="conge-type">
+      <select id="conge-type" onchange="updateCongeForm()">
         <option value="cp">Congés payés</option>
-        <option value="rtt">RTT</option>
+        <option value="rtt">Récup</option>
         <option value="maladie">Maladie</option>
         <option value="autre">Autre</option>
       </select>
-      <label style="font-size:13px;color:#666;display:block;margin-bottom:4px">Date de début</label>
-      <input type="date" id="conge-start" />
-      <label style="font-size:13px;color:#666;display:block;margin-bottom:4px">Date de fin</label>
-      <input type="date" id="conge-end" />
+      <label style="font-size:13px;color:#666;display:block;margin-bottom:4px">Durée</label>
+      <select id="conge-duree" onchange="updateCongeForm()">
+        <option value="full">Journée(s) entière(s)</option>
+        <option value="half_am">Demi-journée — Matin (3h30)</option>
+        <option value="half_pm">Demi-journée — Après-midi (3h30)</option>
+      </select>
+      <label style="font-size:13px;color:#666;display:block;margin-bottom:4px" id="conge-start-label">Date de début</label>
+      <input type="date" id="conge-start" onchange="updateCongeForm()" />
+      <div id="conge-end-wrap">
+        <label style="font-size:13px;color:#666;display:block;margin-bottom:4px">Date de fin</label>
+        <input type="date" id="conge-end" onchange="updateCongeForm()" />
+      </div>
+      <div id="conge-recap" style="font-size:13px;background:#f7f7fb;border-radius:8px;padding:10px;margin-bottom:8px;display:none;"></div>
       <label style="font-size:13px;color:#666;display:block;margin-bottom:4px">Commentaire (optionnel)</label>
       <input type="text" id="conge-comment" placeholder="Ex: vacances d'été" />
       <div class="error" id="conge-err"></div>
@@ -1022,8 +1031,16 @@ async function renderWeeklyRecap() {
     const userSnap = await db.collection('users').doc(CU.uid).get();
     const soldeInitial = userSnap.exists ? (userSnap.data().soldeInitial || 0) : 0;
 
-    // Calculer le solde total (toutes semaines SAUF semaine en cours) + solde initial
-    let soldeTotal = soldeInitial;
+    // Récupérer les récups validées pour les déduire du solde
+    const recupSnap = await db.collection('conges')
+      .where('userId', '==', CU.uid)
+      .where('type', '==', 'rtt')
+      .where('status', '==', 'approved')
+      .get();
+    const recupDeduction = recupSnap.docs.reduce((a, d) => a + (d.data().hoursImpact || 0), 0);
+
+    // Calculer le solde total (toutes semaines SAUF semaine en cours) + solde initial - récups
+    let soldeTotal = soldeInitial - recupDeduction;
     Object.entries(weeks).forEach(([key, w]) => {
       if (key !== thisWeekKey) {
         soldeTotal += w.total - 35;
@@ -1043,8 +1060,9 @@ async function renderWeeklyRecap() {
         : 'Heures en retard sur la semaine de 35h';
       soldeLbl.style.color = soldeTotal >= 0 ? '#0F6E56' : '#E24B4A';
       const nbSemaines = Object.keys(weeks).filter(k => k !== thisWeekKey).length;
-      const soldeInitialStr = soldeInitial !== 0 ? ' · Solde initial : ' + formatSolde(soldeInitial) : '';
-      soldeDetail.textContent = 'Depuis le 13/04/2025 · ' + nbSemaines + ' semaine' + (nbSemaines > 1 ? 's' : '') + soldeInitialStr;
+      const soldeInitialStr = soldeInitial !== 0 ? ' · Init : ' + formatSolde(soldeInitial) : '';
+      const recupStr = recupDeduction > 0 ? ' · Récup utilisées : ' + formatDuration(recupDeduction) : '';
+      soldeDetail.textContent = 'Depuis le 13/04/2025 · ' + nbSemaines + ' semaine' + (nbSemaines > 1 ? 's' : '') + soldeInitialStr + recupStr;
     }
 
     if (!sorted.length) {
@@ -1211,6 +1229,18 @@ async function computeAllSoldes() {
     // Ajouter les users avec solde initial mais sans pointages
     Object.entries(soldesInitiaux).forEach(([uid, si]) => {
       if (si !== 0 && !employeesSolde[uid]) employeesSolde[uid] = si;
+    });
+
+    // Déduire les récups validées
+    const recupSnap = await db.collection('conges')
+      .where('type', '==', 'rtt')
+      .where('status', '==', 'approved')
+      .get();
+    recupSnap.docs.forEach(d => {
+      const c = d.data();
+      if (!c.userId || !c.hoursImpact) return;
+      if (!employeesSolde[c.userId]) employeesSolde[c.userId] = soldesInitiaux[c.userId] || 0;
+      employeesSolde[c.userId] -= c.hoursImpact;
     });
 
   } catch(e) { console.error(e); }
@@ -1427,7 +1457,7 @@ document.getElementById('export-csv').addEventListener('click', async () => {
       rows.push(['', '', '', '', '', '', '', '']);
       rows.push(['=== ABSENCES ET CONGES VALIDES ===', '', '', '', '', '', '', '']);
       rows.push(['Salarie', 'Type absence', 'Date', 'Debut periode', 'Fin periode', 'Jours ouvres', '', 'Commentaire']);
-      const typeLabel = { cp: 'Conges payes', rtt: 'RTT', maladie: 'Maladie', autre: 'Autre' };
+      const typeLabel = { cp: 'Conges payes', rtt: 'Recup', maladie: 'Maladie', autre: 'Autre' };
       congesSnap.docs.sort((a,b) => a.data().userName.localeCompare(b.data().userName)).forEach(d => {
         const c = d.data();
         const startFr = new Date(c.start).toLocaleDateString('fr-FR');
@@ -1467,32 +1497,80 @@ document.getElementById('export-csv').addEventListener('click', async () => {
 let unsubMyConges = null, unsubAllConges = null;
 let currentCongeId = null;
 
-const CONGE_LABELS = { cp: 'Congés payés', rtt: 'RTT', maladie: 'Maladie', autre: 'Autre' };
+const CONGE_LABELS = { cp: 'Congés payés', rtt: 'Récup', maladie: 'Maladie', autre: 'Autre' };
 const CONGE_CLASS = { cp: 'conge-cp', rtt: 'conge-rtt', maladie: 'conge-mal', autre: 'conge-autre' };
 
 function openCongeModal() {
   document.getElementById('conge-err').textContent = '';
   document.getElementById('conge-type').value = 'cp';
+  document.getElementById('conge-duree').value = 'full';
   document.getElementById('conge-start').value = '';
   document.getElementById('conge-end').value = '';
   document.getElementById('conge-comment').value = '';
+  document.getElementById('conge-end-wrap').style.display = 'block';
+  document.getElementById('conge-recap').style.display = 'none';
   document.getElementById('modal-conge').style.display = 'flex';
+}
+
+function updateCongeForm() {
+  const type = document.getElementById('conge-type').value;
+  const duree = document.getElementById('conge-duree').value;
+  const start = document.getElementById('conge-start').value;
+  const end = document.getElementById('conge-end')?.value;
+  const isHalf = duree === 'half_am' || duree === 'half_pm';
+
+  // Masquer date de fin pour demi-journée
+  document.getElementById('conge-end-wrap').style.display = isHalf ? 'none' : 'block';
+  document.getElementById('conge-start-label').textContent = isHalf ? 'Date' : 'Date de début';
+
+  // Afficher récap et impact solde pour récup
+  const recap = document.getElementById('conge-recap');
+  if (start) {
+    let hoursImpact = 0;
+    let daysCount = 0;
+    if (isHalf) {
+      hoursImpact = 3.5;
+      daysCount = 0.5;
+    } else if (start && end) {
+      daysCount = countWorkdays(new Date(start), new Date(end));
+      hoursImpact = daysCount * 7;
+    }
+    if (hoursImpact > 0) {
+      recap.style.display = 'block';
+      const impactStr = type === 'rtt'
+        ? '<span style="color:#E24B4A;font-weight:600;">−' + formatDuration(hoursImpact) + ' déduites du compteur</span>'
+        : '<span style="color:#666;">Pas d'impact sur le compteur d'heures</span>';
+      recap.innerHTML = (daysCount > 0 ? '<b>' + (daysCount % 1 === 0 ? daysCount : '½') + ' jour' + (daysCount > 1 ? 's' : '') + '</b> · ' : '') + impactStr;
+    } else {
+      recap.style.display = 'none';
+    }
+  } else {
+    recap.style.display = 'none';
+  }
 }
 
 document.getElementById('conge-save').addEventListener('click', async () => {
   const type = document.getElementById('conge-type').value;
+  const duree = document.getElementById('conge-duree').value;
   const start = document.getElementById('conge-start').value;
-  const end = document.getElementById('conge-end').value;
+  const isHalf = duree === 'half_am' || duree === 'half_pm';
+  const end = isHalf ? start : document.getElementById('conge-end').value;
   const comment = document.getElementById('conge-comment').value.trim();
   const errEl = document.getElementById('conge-err');
   errEl.textContent = '';
-  if (!start || !end) { errEl.textContent = 'Veuillez renseigner les dates.'; return; }
-  if (end < start) { errEl.textContent = 'La date de fin doit etre apres la date de debut.'; return; }
-  const days = countWorkdays(new Date(start), new Date(end));
+
+  if (!start) { errEl.textContent = 'Veuillez renseigner la date.'; return; }
+  if (!isHalf && (!end || end < start)) { errEl.textContent = 'Veuillez renseigner une date de fin valide.'; return; }
+
+  const days = isHalf ? 0.5 : countWorkdays(new Date(start), new Date(end));
+  const hoursImpact = isHalf ? 3.5 : days * 7;
+
   try {
     await db.collection('conges').add({
       userId: CU.uid, userName: UP?.name || CU.email,
-      type, start, end, days, comment, status: 'pending',
+      type, start, end, days, duree, comment,
+      hoursImpact: type === 'rtt' ? hoursImpact : 0,
+      status: 'pending',
       createdAt: new Date().toISOString()
     });
     closeModal();
@@ -1525,13 +1603,15 @@ function listenMyConges() {
         const statusClass = { pending: 'cs-pending', approved: 'cs-approved', refused: 'cs-refused' }[c.status];
         const startFr = new Date(c.start).toLocaleDateString('fr-FR', {day:'2-digit', month:'2-digit', year:'2-digit'});
         const endFr = new Date(c.end).toLocaleDateString('fr-FR', {day:'2-digit', month:'2-digit', year:'2-digit'});
+        const dureeLabel = c.duree === 'half_am' ? 'Demi-journée matin' : (c.duree === 'half_pm' ? 'Demi-journée après-midi' : (c.days + ' jour' + (c.days > 1 ? 's' : '')));
+        const impactStr = c.type === 'rtt' && c.hoursImpact ? ' · <span style="color:#E24B4A;">−' + formatDuration(c.hoursImpact) + '</span>' : '';
         return '<div class="conge-row">' +
           '<div style="flex:1">' +
           '<div style="display:flex;align-items:center;gap:6px;margin-bottom:4px">' +
           '<span class="conge-type ' + CONGE_CLASS[c.type] + '">' + CONGE_LABELS[c.type] + '</span>' +
           '<span class="conge-status ' + statusClass + '">' + statusLabel + '</span>' +
           '</div>' +
-          '<div style="font-size:13px;font-weight:500;color:#222;">' + startFr + ' -> ' + endFr + ' · ' + c.days + ' jour' + (c.days > 1 ? 's' : '') + '</div>' +
+          '<div style="font-size:13px;font-weight:500;color:#222;">' + startFr + (c.duree && c.duree !== 'full' && startFr === endFr ? '' : ' → ' + endFr) + ' · ' + dureeLabel + impactStr + '</div>' +
           (c.comment ? '<div style="font-size:11px;color:#aaa;margin-top:2px;">' + c.comment + '</div>' : '') +
           '</div>' +
           (c.status === 'pending' ? '<button class="btn-sm btn-danger" onclick="deleteConge(\'' + d.id + '\')">Annuler</button>' : '') +
