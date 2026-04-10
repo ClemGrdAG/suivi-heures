@@ -270,6 +270,14 @@ input:focus, select:focus { outline: none; border-color: #7F77DD; background: #f
         </div>
       </div>
       <div class="card">
+        <div class="card-title">Compteur de solde d'heures</div>
+        <div id="solde-card" style="text-align:center; padding: 1rem 0;">
+          <div id="solde-val" style="font-size:42px; font-weight:700; color:#7F77DD;">0h00</div>
+          <div id="solde-lbl" style="font-size:13px; color:#aaa; margin-top:6px;">Calcul en cours...</div>
+          <div id="solde-detail" style="font-size:12px; color:#bbb; margin-top:8px;"></div>
+        </div>
+      </div>
+      <div class="card">
         <div class="card-title">Suivi par semaine</div>
         <div id="weekly-recap"><div class="loader">Chargement...</div></div>
       </div>
@@ -821,27 +829,32 @@ async function renderStats() {
   await renderWeeklyRecap();
 }
 
+function formatSolde(h) {
+  const sign = h >= 0 ? '+' : '-';
+  const abs = Math.abs(h);
+  const hh = Math.floor(abs);
+  const mm = Math.round((abs - hh) * 60);
+  return sign + hh + 'h' + String(mm).padStart(2, '0');
+}
+
 async function renderWeeklyRecap() {
   if (!CU) return;
   const el = document.getElementById('weekly-recap');
   try {
-    // Récupérer les 12 dernières semaines
     const now = new Date();
     const day = now.getDay() || 7;
     const thisMon = new Date(now);
     thisMon.setDate(now.getDate() - day + 1);
     thisMon.setHours(0,0,0,0);
-    const startFrom = new Date(thisMon);
-    startFrom.setDate(startFrom.getDate() - 11 * 7); // 12 semaines en arrière
 
+    // Récupérer TOUS les pointages depuis le début
     const snap = await db.collection('pointages')
       .where('userId', '==', CU.uid)
-      .where('endTime', '>=', startFrom.toISOString())
       .get();
 
     const entries = snap.docs.map(d => d.data());
 
-    // Grouper par semaine (lundi)
+    // Grouper par semaine
     const weeks = {};
     entries.forEach(e => {
       const d = new Date(e.endTime);
@@ -855,34 +868,71 @@ async function renderWeeklyRecap() {
       weeks[key].days.add(e.date);
     });
 
+    const thisWeekKey = thisMon.toISOString().split('T')[0];
     const sorted = Object.entries(weeks).sort((a,b) => b[0].localeCompare(a[0]));
+
+    // Calculer le solde total (toutes semaines SAUF semaine en cours)
+    let soldeTotal = 0;
+    Object.entries(weeks).forEach(([key, w]) => {
+      if (key !== thisWeekKey) {
+        soldeTotal += w.total - 35;
+      }
+    });
+
+    // Afficher le compteur de solde
+    const soldeEl = document.getElementById('solde-val');
+    const soldeLbl = document.getElementById('solde-lbl');
+    const soldeDetail = document.getElementById('solde-detail');
+    if (soldeEl) {
+      const soldeStr = formatSolde(soldeTotal);
+      soldeEl.textContent = soldeStr;
+      soldeEl.style.color = soldeTotal >= 0 ? '#1D9E75' : '#E24B4A';
+      soldeLbl.textContent = soldeTotal >= 0
+        ? 'Heures en avance sur la semaine de 35h'
+        : 'Heures en retard sur la semaine de 35h';
+      soldeLbl.style.color = soldeTotal >= 0 ? '#0F6E56' : '#E24B4A';
+      const nbSemaines = Object.keys(weeks).filter(k => k !== thisWeekKey).length;
+      soldeDetail.textContent = 'Calculé sur ' + nbSemaines + ' semaine' + (nbSemaines > 1 ? 's' : '') + ' (semaine en cours exclue)';
+    }
 
     if (!sorted.length) {
       el.innerHTML = '<div class="empty-state">Aucune donnée disponible</div>';
       return;
     }
 
-    el.innerHTML = sorted.map(([key, w]) => {
+    // Afficher seulement les 12 dernières semaines dans le tableau
+    const last12 = sorted.slice(0, 12);
+
+    el.innerHTML = last12.map(([key, w]) => {
       const monStr = w.mon.toLocaleDateString('fr-FR', {day:'2-digit', month:'2-digit'});
       const fri = new Date(w.mon); fri.setDate(w.mon.getDate() + 4);
       const friStr = fri.toLocaleDateString('fr-FR', {day:'2-digit', month:'2-digit'});
-      const isThisWeek = key === thisMon.toISOString().split('T')[0];
+      const isThisWeek = key === thisWeekKey;
       const pct = Math.min(Math.round((w.total / 35) * 100), 100);
-      const color = w.total > 35 ? '#7F77DD' : w.total === 35 || (w.total > 34.9) ? '#1D9E75' : '#E24B4A';
-      return `<div style="padding: 10px 0; border-bottom: 1px solid #f5f5f5;">
-        <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:6px;">
-          <div>
-            <span style="font-size:13px; font-weight:500; color:#222;">${monStr} — ${friStr}</span>
-            ${isThisWeek ? '<span style="font-size:11px;background:#EEEDFE;color:#534AB7;padding:2px 7px;border-radius:8px;margin-left:6px;font-weight:500;">Semaine actuelle</span>' : ''}
-          </div>
-          <span style="font-size:14px; font-weight:700; color:${color};">${w.total.toFixed(1)}h</span>
-        </div>
-        <div style="height:6px; background:#f0f0f0; border-radius:3px; overflow:hidden;">
-          <div style="height:100%; width:${pct}%; background:${color}; border-radius:3px; transition:width 0.3s;"></div>
-        </div>
-        <div style="font-size:11px; color:#aaa; margin-top:4px;">${w.days.size} jour${w.days.size > 1 ? 's' : ''} travaillé${w.days.size > 1 ? 's' : ''} · objectif 35h</div>
-      </div>`;
+      const color = w.total > 35 ? '#7F77DD' : (w.total >= 34.9 ? '#1D9E75' : '#E24B4A');
+      const delta = w.total - 35;
+      const deltaStr = formatSolde(delta);
+      const deltaColor = delta >= 0 ? '#1D9E75' : '#E24B4A';
+      const deltaBg = delta >= 0 ? '#E1F5EE' : '#FDEAEA';
+
+      return '<div style="padding: 10px 0; border-bottom: 1px solid #f5f5f5;">' +
+        '<div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:6px;">' +
+        '<div>' +
+        '<span style="font-size:13px; font-weight:500; color:#222;">' + monStr + ' — ' + friStr + '</span>' +
+        (isThisWeek ? '<span style="font-size:11px;background:#EEEDFE;color:#534AB7;padding:2px 7px;border-radius:8px;margin-left:6px;font-weight:500;">En cours</span>' : '') +
+        '</div>' +
+        '<div style="display:flex;align-items:center;gap:8px;">' +
+        (!isThisWeek ? '<span style="font-size:11px;font-weight:600;padding:2px 8px;border-radius:10px;background:' + deltaBg + ';color:' + deltaColor + ';">' + deltaStr + '</span>' : '') +
+        '<span style="font-size:14px; font-weight:700; color:' + color + ';">' + w.total.toFixed(1) + 'h</span>' +
+        '</div>' +
+        '</div>' +
+        '<div style="height:6px; background:#f0f0f0; border-radius:3px; overflow:hidden;">' +
+        '<div style="height:100%; width:' + pct + '%; background:' + color + '; border-radius:3px;"></div>' +
+        '</div>' +
+        '<div style="font-size:11px; color:#aaa; margin-top:4px;">' + w.days.size + ' jour' + (w.days.size > 1 ? 's' : '') + ' travaillé' + (w.days.size > 1 ? 's' : '') + ' · objectif 35h</div>' +
+        '</div>';
     }).join('');
+
   } catch(e) {
     el.innerHTML = '<div class="empty-state" style="color:#E24B4A">Erreur : ' + e.message + '</div>';
     console.error(e);
@@ -960,10 +1010,45 @@ async function updateAdminStats() {
 // =============================================
 // ADMIN — EMPLOYÉS
 // =============================================
+let employeesSolde = {};
+
+async function computeAllSoldes() {
+  const now = new Date();
+  const day = now.getDay() || 7;
+  const thisMon = new Date(now);
+  thisMon.setDate(now.getDate() - day + 1);
+  thisMon.setHours(0,0,0,0);
+  const thisWeekKey = thisMon.toISOString().split('T')[0];
+
+  try {
+    const snap = await db.collection('pointages').get();
+    const byUser = {};
+    snap.docs.forEach(d => {
+      const e = d.data();
+      if (!e.userId) return;
+      if (!byUser[e.userId]) byUser[e.userId] = {};
+      const dt = new Date(e.endTime);
+      const wd = dt.getDay() || 7;
+      const mon = new Date(dt);
+      mon.setDate(dt.getDate() - wd + 1);
+      mon.setHours(0,0,0,0);
+      const key = mon.toISOString().split('T')[0];
+      if (key === thisWeekKey) return; // exclure semaine en cours
+      if (!byUser[e.userId][key]) byUser[e.userId][key] = 0;
+      byUser[e.userId][key] += e.duration;
+    });
+    employeesSolde = {};
+    Object.entries(byUser).forEach(([uid, weeks]) => {
+      employeesSolde[uid] = Object.values(weeks).reduce((a, h) => a + (h - 35), 0);
+    });
+  } catch(e) { console.error(e); }
+}
+
 function listenEmployees() {
   if (unsubEmployees) unsubEmployees();
   try {
-    unsubEmployees = db.collection('users').onSnapshot(snap => {
+    unsubEmployees = db.collection('users').onSnapshot(async snap => {
+      await computeAllSoldes();
       const el = document.getElementById('employees-list');
       const users = snap.docs.map(d => ({ id: d.id, ...d.data() }));
       if (!users.length) { el.innerHTML = '<div class="empty-state">Aucun employé</div>'; return; }
@@ -971,6 +1056,10 @@ function listenEmployees() {
       el.innerHTML = users.map(u => {
         const ini = (u.name||'?').split(' ').map(n=>n[0]).join('').toUpperCase().slice(0,2);
         const isActive = u.active !== false;
+        const solde = employeesSolde[u.id] || 0;
+        const soldeStr = formatSolde(solde);
+        const soldeColor = solde >= 0 ? '#0F6E56' : '#A32D2D';
+        const soldeBg = solde >= 0 ? '#E1F5EE' : '#FDEAEA';
         return `<div class="admin-row">
           <div class="avatar ${isActive?'':'inactive'}">${ini}</div>
           <div class="admin-row-info">
@@ -978,6 +1067,7 @@ function listenEmployees() {
             <div class="emp-sub">${u.email||''} · ${u.team==='itinerant'?'Itinérant':'Sédentaire'}</div>
           </div>
           <div class="admin-row-actions">
+            <span style="font-size:11px;font-weight:600;padding:3px 8px;border-radius:10px;background:${soldeBg};color:${soldeColor};">${soldeStr}</span>
             <span class="sbadge ${isActive?'s-present':'s-disabled'}">${isActive?'Actif':'Désactivé'}</span>
             <button class="btn-sm ${isActive?'btn-danger':'btn-edit'}" onclick="toggleEmployee('${u.id}', ${isActive})">
               ${isActive?'Désactiver':'Réactiver'}
