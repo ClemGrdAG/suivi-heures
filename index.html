@@ -437,6 +437,22 @@ const DAYS = ['Lun','Mar','Mer','Jeu','Ven'];
 // =============================================
 // UTILS
 // =============================================
+
+// Arrondi au quart d'heure le plus proche
+function roundToQuarter(date) {
+  const d = new Date(date);
+  const mins = d.getMinutes();
+  const rounded = Math.round(mins / 15) * 15;
+  d.setMinutes(rounded, 0, 0);
+  return d;
+}
+
+function formatDuration(hours) {
+  const h = Math.floor(hours);
+  const m = Math.round((hours - h) * 60);
+  return h + 'h' + String(m).padStart(2, '0');
+}
+
 function show(id) {
   document.querySelectorAll('.screen').forEach(s => s.classList.remove('active'));
   document.getElementById(id).classList.add('active');
@@ -617,14 +633,16 @@ document.getElementById('badge-btn').addEventListener('click', async () => {
         );
       });
     }
-    const dur = (now - new Date(badgeTime)) / 3600000;
+    const roundedStart = roundToQuarter(new Date(badgeTime));
+    const roundedEnd = roundToQuarter(now);
+    const dur = (roundedEnd - roundedStart) / 3600000;
     try {
       await db.collection('pointages').add({
         userId: CU.uid, userName: UP?.name || CU.email,
-        startTime: badgeTime, endTime: now.toISOString(),
+        startTime: roundedStart.toISOString(), endTime: roundedEnd.toISOString(),
         duration: dur, geo: geo || null,
         team: UP?.team || 'sedentaire',
-        date: now.toISOString().split('T')[0]
+        date: roundedEnd.toISOString().split('T')[0]
       });
       await db.collection('badges').doc(CU.uid).set({ active: false, userId: CU.uid });
       isBadged = false; badgeTime = null; geo = null;
@@ -714,7 +732,7 @@ function listenHistory() {
         const loc = e.geo ? '📍 '+e.geo.lat+', '+e.geo.lng : 'Position non enregistrée';
         return `<div class="h-item">
           <div style="flex:1">
-            <div class="h-main"><span class="h-dot dot-in"></span>${s}<span style="color:#ccc;margin:0 4px">→</span><span class="h-dot dot-out"></span>${en}<span class="h-dur">${e.duration.toFixed(1)}h</span></div>
+            <div class="h-main"><span class="h-dot dot-in"></span>${s}<span style="color:#ccc;margin:0 4px">→</span><span class="h-dot dot-out"></span>${en}<span class="h-dur">${formatDuration(e.duration)}</span></div>
             <div class="h-sub">${loc}</div>
           </div>
           <div class="h-date">${dateStr}</div>
@@ -821,10 +839,10 @@ async function renderStats() {
     const mH = entries.reduce((a,e)=>a+e.duration,0);
     const wH = entries.filter(e=>new Date(e.endTime)>=mon).reduce((a,e)=>a+e.duration,0);
     const days = new Set(entries.map(e=>e.date)).size;
-    document.getElementById('st-week').textContent = wH.toFixed(1)+'h';
-    document.getElementById('st-month').textContent = mH.toFixed(1)+'h';
+    document.getElementById('st-week').textContent = formatDuration(wH);
+    document.getElementById('st-month').textContent = formatDuration(mH);
     document.getElementById('st-days').textContent = days;
-    document.getElementById('st-avg').textContent = (days?mH/days:0).toFixed(1)+'h';
+    document.getElementById('st-avg').textContent = formatDuration(days?mH/days:0);
   } catch(e) { console.error(e); }
   await renderWeeklyRecap();
 }
@@ -923,7 +941,7 @@ async function renderWeeklyRecap() {
         '</div>' +
         '<div style="display:flex;align-items:center;gap:8px;">' +
         (!isThisWeek ? '<span style="font-size:11px;font-weight:600;padding:2px 8px;border-radius:10px;background:' + deltaBg + ';color:' + deltaColor + ';">' + deltaStr + '</span>' : '') +
-        '<span style="font-size:14px; font-weight:700; color:' + color + ';">' + w.total.toFixed(1) + 'h</span>' +
+        '<span style="font-size:14px; font-weight:700; color:' + color + ';">' + formatDuration(w.total) + '</span>' +
         '</div>' +
         '</div>' +
         '<div style="height:6px; background:#f0f0f0; border-radius:3px; overflow:hidden;">' +
@@ -974,7 +992,7 @@ function renderAllPointages() {
     return `<div class="pointage-row">
       <div class="pointage-info">
         <div class="pointage-name">${e.userName || 'Inconnu'}</div>
-        <div class="pointage-detail">${dateStr} · ${s} → ${en} <span class="h-dur" style="margin-left:4px">${e.duration.toFixed(1)}h</span></div>
+        <div class="pointage-detail">${dateStr} · ${s} → ${en} <span class="h-dur" style="margin-left:4px">${formatDuration(e.duration)}</span></div>
       </div>
       <div style="display:flex;gap:5px;flex-shrink:0">
         <button class="btn-sm btn-edit" onclick="openEdit('${e.id}')">Éditer</button>
@@ -1223,7 +1241,7 @@ document.getElementById('export-csv').addEventListener('click', async () => {
               start.toLocaleDateString('fr-FR'),
               start.toLocaleTimeString('fr-FR',{hour:'2-digit',minute:'2-digit'}),
               end.toLocaleTimeString('fr-FR',{hour:'2-digit',minute:'2-digit'}),
-              e.duration.toFixed(2),
+              formatDuration(e.duration),
               e.team === 'itinerant' ? 'Itinérant' : 'Sédentaire',
               address
             ]);
