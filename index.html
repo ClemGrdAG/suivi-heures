@@ -798,44 +798,54 @@ function listenHistory() {
           '</div>' +
           '</div>';
 
-        // Entrées de la semaine
-        let runningTotal = 0;
-        const sortedWkEntries = [...wkEntries].sort((a,b) => new Date(a.endTime) - new Date(b.endTime));
-        sortedWkEntries.forEach(e => { runningTotal += e.duration; });
-        let cumul = 0;
-        [...wkEntries].reverse().forEach(e => {
-          const start = new Date(e.startTime);
-          const end = new Date(e.endTime);
-          const dateStr = end.toLocaleDateString('fr-FR',{weekday:'long',day:'2-digit',month:'2-digit'});
-          const startHour = start.getHours();
-          const period = startHour < 12 ? 'Matin' : 'Après-midi';
-          const periodColor = startHour < 12 ? '#534AB7' : '#0F6E56';
-          const periodBg = startHour < 12 ? '#EEEDFE' : '#E1F5EE';
-          const s = start.toLocaleTimeString('fr-FR',{hour:'2-digit',minute:'2-digit'});
-          const en2 = end.toLocaleTimeString('fr-FR',{hour:'2-digit',minute:'2-digit'});
-          const loc = e.geo ? '📍 ' : '';
-          cumul += e.duration;
-
-          html += '<div class="h-item">' +
-            '<div style="flex:1">' +
-            '<div style="display:flex;align-items:center;gap:6px;margin-bottom:3px;">' +
-            '<span style="font-size:11px;font-weight:600;padding:1px 7px;border-radius:6px;background:' + periodBg + ';color:' + periodColor + ';">' + period + '</span>' +
-            '<span style="font-size:12px;color:#aaa;">' + dateStr + '</span>' +
-            '</div>' +
-            '<div class="h-main">' +
-            '<span class="h-dot dot-in"></span>' + s +
-            '<span style="color:#ccc;margin:0 4px">→</span>' +
-            '<span class="h-dot dot-out"></span>' + en2 +
-            '<span class="h-dur">' + formatDuration(e.duration) + '</span>' +
-            (loc ? '<span style="font-size:11px;color:#aaa;margin-left:4px;">📍</span>' : '') +
-            '</div>' +
-            '</div>' +
-            '<div style="text-align:right;">' +
-            '<div style="font-size:12px;font-weight:600;color:#534AB7;">+' + formatDuration(e.duration) + '</div>' +
-            '</div>' +
-            '</div>';
+        // Grouper les entrées par jour
+        const byDay = {};
+        wkEntries.forEach(e => {
+          const dayKey = new Date(e.endTime).toISOString().split('T')[0];
+          const dayLabel = new Date(e.endTime).toLocaleDateString('fr-FR',{weekday:'long',day:'2-digit',month:'2-digit'});
+          if (!byDay[dayKey]) byDay[dayKey] = { label: dayLabel, entries: [], total: 0 };
+          byDay[dayKey].entries.push(e);
+          byDay[dayKey].total += e.duration;
         });
-        html += '<div style="height:1px;background:#eee;margin:4px 0 8px;"></div>';
+
+        // Trier du plus récent au plus ancien
+        Object.entries(byDay).sort((a,b) => b[0].localeCompare(a[0])).forEach(([dayKey, dayData]) => {
+          // En-tête journalier avec total du jour
+          const dayColor = dayData.total >= 7 ? '#0F6E56' : '#534AB7';
+          html += '<div style="display:flex;justify-content:space-between;align-items:center;padding:8px 0 4px;">' +
+            '<span style="font-size:12px;font-weight:600;color:#333;text-transform:capitalize;">' + dayData.label + '</span>' +
+            '<span style="font-size:12px;font-weight:700;background:#f0f0f0;color:' + dayColor + ';padding:2px 10px;border-radius:8px;">Total : ' + formatDuration(dayData.total) + '</span>' +
+            '</div>';
+
+          // Pointages du jour
+          dayData.entries.sort((a,b) => new Date(b.endTime) - new Date(a.endTime)).forEach(e => {
+            const start = new Date(e.startTime);
+            const end = new Date(e.endTime);
+            const startHour = start.getHours();
+            const period = startHour < 12 ? 'Matin' : 'Après-midi';
+            const periodColor = startHour < 12 ? '#534AB7' : '#0F6E56';
+            const periodBg = startHour < 12 ? '#EEEDFE' : '#E1F5EE';
+            const s = start.toLocaleTimeString('fr-FR',{hour:'2-digit',minute:'2-digit'});
+            const en2 = end.toLocaleTimeString('fr-FR',{hour:'2-digit',minute:'2-digit'});
+
+            html += '<div class="h-item" style="padding:6px 0 6px 10px;border-left:2px solid #f0f0f0;">' +
+              '<div style="flex:1">' +
+              '<div style="display:flex;align-items:center;gap:6px;margin-bottom:3px;">' +
+              '<span style="font-size:11px;font-weight:600;padding:1px 7px;border-radius:6px;background:' + periodBg + ';color:' + periodColor + ';">' + period + '</span>' +
+              '</div>' +
+              '<div class="h-main">' +
+              '<span class="h-dot dot-in"></span>' + s +
+              '<span style="color:#ccc;margin:0 4px">→</span>' +
+              '<span class="h-dot dot-out"></span>' + en2 +
+              '<span class="h-dur">' + formatDuration(e.duration) + '</span>' +
+              (e.geo ? '<span style="font-size:11px;color:#aaa;margin-left:4px;">📍</span>' : '') +
+              '</div>' +
+              '</div>' +
+              '</div>';
+          });
+          html += '<div style="height:1px;background:#f0f0f0;margin:2px 0 4px;"></div>';
+        });
+        html += '<div style="height:6px;"></div>';
       });
 
       el.innerHTML = html || '<div class="empty-state">Aucun pointage enregistré</div>';
