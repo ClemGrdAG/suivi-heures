@@ -794,7 +794,9 @@ async function checkHoraires(type, time) {
     } else if (totalMins >= 15 * 60) {
       // Départ du soir → pas avant 15h30
       if (totalMins < 15 * 60 + 30) {
-        violations.push('Départ trop tôt — départ possible à partir de 15h30 (' + h + 'h' + String(m).padStart(2,'0') + ' enregistré). Pense au lave vaisselle, éteins les lumières et ferme les volets ! 🫧💡🪟');
+        violations.push('Départ trop tôt — départ possible à partir de 15h30 (' + h + 'h' + String(m).padStart(2,'0') + ' enregistré).');
+      } else {
+        violations.push('Pense au lave vaisselle, éteins les lumières et ferme les volets ! 🫧💡🪟');
       }
     }
   }
