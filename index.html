@@ -1065,22 +1065,6 @@ function listenHistory() {
             const s = start.toLocaleTimeString('fr-FR',{hour:'2-digit',minute:'2-digit'});
             const en2 = end.toLocaleTimeString('fr-FR',{hour:'2-digit',minute:'2-digit'});
 
-            // Adresses
-            const isItin = e.team === 'itinerant';
-            let locHtml = '';
-            if (isItin) {
-              const startCoords = e.geoStart ? e.geoStart.lat + ',' + e.geoStart.lng : (e.geo ? e.geo.lat + ',' + e.geo.lng : null);
-              const endCoords = e.geoEnd ? e.geoEnd.lat + ',' + e.geoEnd.lng : null;
-              if (startCoords || endCoords) {
-                locHtml = '<div style="font-size:11px;color:#888;margin-top:3px;">' +
-                  (startCoords ? '📍 Arrivée : ' + startCoords : '') +
-                  (endCoords ? ' &nbsp;→&nbsp; 📍 Départ : ' + endCoords : '') +
-                  '</div>';
-              }
-            } else {
-              locHtml = '<div style="font-size:11px;color:#bbb;margin-top:3px;">🏢 Bureau</div>';
-            }
-
             html += '<div class="h-item" style="padding:6px 0 6px 10px;border-left:2px solid #f0f0f0;">' +
               '<div style="flex:1">' +
               '<div style="display:flex;align-items:center;gap:6px;margin-bottom:3px;">' +
@@ -1091,8 +1075,8 @@ function listenHistory() {
               '<span style="color:#ccc;margin:0 4px">→</span>' +
               '<span class="h-dot dot-out"></span>' + en2 +
               '<span class="h-dur">' + formatDuration(e.duration) + '</span>' +
+              (e.geo ? '<span style="font-size:11px;color:#aaa;margin-left:4px;">📍</span>' : '') +
               '</div>' +
-              locHtml +
               '</div>' +
               '</div>';
           });
@@ -1404,22 +1388,10 @@ function renderAllPointages() {
     const s = new Date(e.startTime).toLocaleTimeString('fr-FR',{hour:'2-digit',minute:'2-digit'});
     const en = end.toLocaleTimeString('fr-FR',{hour:'2-digit',minute:'2-digit'});
     const alertIcon = e.alert ? '<span style="font-size:11px;color:#A32D2D;background:#FDEAEA;border-radius:5px;padding:1px 6px;margin-left:6px;">⚠ ' + e.alert + '</span>' : '';
-    const isItin = e.team === 'itinerant';
-    const startCoords = e.geoStart ? e.geoStart.lat + ',' + e.geoStart.lng : (e.geo ? e.geo.lat + ',' + e.geo.lng : null);
-    const endCoords = e.geoEnd ? e.geoEnd.lat + ',' + e.geoEnd.lng : null;
-    const locLine = isItin
-      ? (startCoords || endCoords
-          ? '<div style="font-size:11px;color:#888;margin-top:2px;">' +
-            (startCoords ? '📍 Arrivée : ' + startCoords : '') +
-            (endCoords ? ' &nbsp;→&nbsp; 📍 Départ : ' + endCoords : '') +
-            '</div>'
-          : '<div style="font-size:11px;color:#bbb;margin-top:2px;">📍 Position non enregistrée</div>')
-      : '<div style="font-size:11px;color:#bbb;margin-top:2px;">🏢 Bureau</div>';
     return `<div class="pointage-row" style="${e.alert ? 'border-left:3px solid #E24B4A;padding-left:8px;' : ''}">
       <div class="pointage-info">
         <div class="pointage-name">${e.userName || 'Inconnu'}${alertIcon}</div>
         <div class="pointage-detail">${dateStr} · ${s} → ${en} <span class="h-dur" style="margin-left:4px">${formatDuration(e.duration)}</span></div>
-        ${locLine}
       </div>
       <div style="display:flex;gap:5px;flex-shrink:0">
         <button class="btn-sm btn-edit" onclick="openEdit('${e.id}')">Éditer</button>
