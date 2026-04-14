@@ -774,12 +774,12 @@ async function checkHoraires(type, time) {
     if (sessionsToday === 0) {
       // 1er badgeage = arrivée du matin → doit être avant 10h00
       if (totalMins > 10 * 60) {
-        violations.push('Arrivée tardive — ' + h + 'h' + String(m).padStart(2,'0') + ' enregistré. T\'es en retard ! Tu peux aller chercher des pains au chocolat ! 🍫');
+        violations.push('Arrivée tardive — ' + h + 'h' + String(m).padStart(2,'0') + ' enregistré. C\'est l\'heure des pains au chocolat ! 🍫');
       }
     } else {
       // 2ème badgeage IN = retour pause déjeuner → doit être avant 14h00
       if (totalMins > 14 * 60) {
-        violations.push('Retour de pause trop tardif — ' + h + 'h' + String(m).padStart(2,'0') + ' enregistré. Tu es en retard, tu peux aller acheter une boite de bonbons ! 🍬');
+        violations.push('Retour de pause trop tardif — ' + h + 'h' + String(m).padStart(2,'0') + ' enregistré. Fais péter les bonbecs ! 🍬');
       }
     }
   }
