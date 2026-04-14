@@ -779,7 +779,7 @@ async function checkHoraires(type, time) {
     } else {
       // 2ème badgeage IN = retour pause déjeuner → doit être avant 14h00
       if (totalMins > 14 * 60) {
-        violations.push('Retour de pause trop tardif — vous devez reprendre avant 14h00 (' + h + 'h' + String(m).padStart(2,'0') + ' enregistré).');
+        violations.push('Retour de pause trop tardif — ' + h + 'h' + String(m).padStart(2,'0') + ' enregistré. Tu es en retard, tu peux aller acheter une boite de bonbons ! 🍬');
       }
     }
   }
