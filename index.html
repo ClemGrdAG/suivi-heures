@@ -710,23 +710,51 @@ async function checkBadge() {
 }
 
 // Vérification des horaires flexibles
-// Règles : arrivée avant 10h, départ à partir de 15h30
-function checkHoraires(type, time) {
+// Règles :
+//   - Arrivée (1er badgeage du jour) : avant 10h00
+//   - Départ pause déj (badgeage OUT entre 10h et 14h) : pas avant 12h00
+//   - Retour pause déj (badgeage IN entre 12h et 16h) : pas après 14h00
+//   - Départ du soir (badgeage OUT après 14h) : pas avant 15h30
+
+async function checkHoraires(type, time) {
   const h = time.getHours();
   const m = time.getMinutes();
   const totalMins = h * 60 + m;
+  const today = time.toISOString().split('T')[0];
   const violations = [];
 
+  // Récupérer les pointages du jour pour savoir combien de sessions il y a déjà
+  const snap = await db.collection('pointages')
+    .where('userId', '==', CU.uid)
+    .where('date', '==', today)
+    .get();
+  const sessionsToday = snap.docs.length;
+
   if (type === 'in') {
-    // Arrivée après 10h00
-    if (totalMins > 10 * 60) {
-      violations.push('Arrivée tardive — vous devez être arrivé avant 10h00.');
+    if (sessionsToday === 0) {
+      // 1er badgeage = arrivée du matin → doit être avant 10h00
+      if (totalMins > 10 * 60) {
+        violations.push('Arrivée tardive — vous devez être arrivé avant 10h00 (' + h + 'h' + String(m).padStart(2,'0') + ' enregistré).');
+      }
+    } else {
+      // 2ème badgeage IN = retour pause déjeuner → doit être avant 14h00
+      if (totalMins > 14 * 60) {
+        violations.push('Retour de pause trop tardif — vous devez reprendre avant 14h00 (' + h + 'h' + String(m).padStart(2,'0') + ' enregistré).');
+      }
     }
   }
+
   if (type === 'out') {
-    // Départ avant 15h30
-    if (totalMins < 15 * 60 + 30) {
-      violations.push('Départ trop tôt — départ possible à partir de 15h30.');
+    if (totalMins >= 10 * 60 && totalMins < 15 * 60) {
+      // Départ entre 10h et 15h = départ pause déjeuner → pas avant 12h00
+      if (totalMins < 12 * 60) {
+        violations.push('Pause déjeuner trop tôt — vous pouvez partir en pause à partir de 12h00 (' + h + 'h' + String(m).padStart(2,'0') + ' enregistré).');
+      }
+    } else if (totalMins >= 15 * 60) {
+      // Départ du soir → pas avant 15h30
+      if (totalMins < 15 * 60 + 30) {
+        violations.push('Départ trop tôt — le départ est possible à partir de 15h30 (' + h + 'h' + String(m).padStart(2,'0') + ' enregistré).');
+      }
     }
   }
   return violations;
@@ -760,7 +788,7 @@ document.getElementById('badge-btn').addEventListener('click', async () => {
   if (!isBadged) {
     isBadged = true; badgeTime = now.toISOString();
     // Vérification horaire arrivée
-    const inViolations = checkHoraires('in', now);
+    const inViolations = await checkHoraires('in', now);
     const inAlert = inViolations.length > 0 ? inViolations[0] : null;
     if (inAlert) {
       showHoraireAlert(inAlert, true);
@@ -790,7 +818,7 @@ document.getElementById('badge-btn').addEventListener('click', async () => {
     }
 
     // Vérification horaire départ
-    const violations = checkHoraires('out', now);
+    const violations = await checkHoraires('out', now);
     let alertMsg = null;
     if (violations.length > 0) {
       alertMsg = violations[0];
