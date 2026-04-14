@@ -328,6 +328,7 @@ input:focus, select:focus { outline: none; border-color: var(--ag-gold); backgro
           <div class="card-title">Tous les pointages</div>
           <div style="display:flex;gap:8px;flex-wrap:wrap;">
             <button class="btn-csv" id="export-csv">⬇ CSV</button>
+            <button class="btn-csv" id="btn-add-pointage" style="background:var(--ag-navy);color:var(--ag-gold);">+ Ajouter</button>
             <div style="display:flex;align-items:center;gap:8px;">
               <div>
                 <div style="font-size:10px;color:#aaa;margin-bottom:2px;">Mois</div>
@@ -403,6 +404,48 @@ input:focus, select:focus { outline: none; border-color: var(--ag-gold); backgro
       <div class="modal-actions">
         <button class="btn-secondary" onclick="closeModal()">Annuler</button>
         <button class="btn-primary" style="background:#E24B4A" id="modal-confirm-delete">Supprimer</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Modal ajout pointage admin -->
+  <div class="modal-overlay" id="modal-add-pointage" style="display:none">
+    <div class="modal">
+      <h3>Ajouter un pointage</h3>
+      <label style="font-size:13px;color:#666;display:block;margin-bottom:4px">Salarié</label>
+      <select id="add-emp-select" style="margin-bottom:10px;"></select>
+      <label style="font-size:13px;color:#666;display:block;margin-bottom:4px">Date</label>
+      <input type="date" id="add-date" style="margin-bottom:10px;" />
+      <label style="font-size:13px;color:#666;display:block;margin-bottom:4px">Heure d'arrivée</label>
+      <input type="time" id="add-start-time" value="08:00" style="margin-bottom:10px;" />
+      <label style="font-size:13px;color:#666;display:block;margin-bottom:4px">Heure de départ</label>
+      <input type="time" id="add-end-time" value="17:00" style="margin-bottom:10px;" />
+      <div id="add-recap" style="font-size:13px;background:#f7f7fb;border-radius:8px;padding:10px;margin-bottom:8px;color:#555;"></div>
+      <div class="error" id="add-err"></div>
+      <div class="modal-actions">
+        <button class="btn-secondary" onclick="closeModal()">Annuler</button>
+        <button class="btn-primary" id="add-pointage-save">Enregistrer</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Modal ajout pointage admin -->
+  <div class="modal-overlay" id="modal-add-pointage" style="display:none">
+    <div class="modal">
+      <h3>Ajouter un pointage</h3>
+      <label style="font-size:13px;color:#666;display:block;margin-bottom:4px">Salarié</label>
+      <select id="add-emp-select" style="margin-bottom:10px;"></select>
+      <label style="font-size:13px;color:#666;display:block;margin-bottom:4px">Date</label>
+      <input type="date" id="add-date" style="margin-bottom:10px;" />
+      <label style="font-size:13px;color:#666;display:block;margin-bottom:4px">Heure d'arrivée</label>
+      <input type="time" id="add-start-time" value="08:00" style="margin-bottom:10px;" />
+      <label style="font-size:13px;color:#666;display:block;margin-bottom:4px">Heure de départ</label>
+      <input type="time" id="add-end-time" value="17:00" style="margin-bottom:10px;" />
+      <div id="add-recap" style="font-size:13px;background:#f7f7fb;border-radius:8px;padding:10px;margin-bottom:8px;color:#555;"></div>
+      <div class="error" id="add-err"></div>
+      <div class="modal-actions">
+        <button class="btn-secondary" onclick="closeModal()">Annuler</button>
+        <button class="btn-primary" id="add-pointage-save">Enregistrer</button>
       </div>
     </div>
   </div>
@@ -531,6 +574,7 @@ function closeModal() {
   document.getElementById('modal-conge').style.display = 'none';
   document.getElementById('modal-conge-admin').style.display = 'none';
   document.getElementById('modal-solde').style.display = 'none';
+  document.getElementById('modal-add-pointage').style.display = 'none';
 }
 function toLocalDatetime(isoStr) {
   const d = new Date(isoStr);
@@ -1891,6 +1935,94 @@ document.getElementById('conge-delete').addEventListener('click', async () => {
     await db.collection('conges').doc(currentCongeId).delete();
     closeModal();
   } catch(e) { alert('Erreur : ' + e.message); }
+});
+
+// =============================================
+// AJOUT POINTAGE ADMIN
+// =============================================
+let allUsersCache = [];
+
+async function loadUsersForSelect() {
+  if (allUsersCache.length) return;
+  const snap = await db.collection('users').where('active', '==', true).get();
+  allUsersCache = snap.docs.map(d => ({ id: d.id, ...d.data() }))
+    .sort((a,b) => (a.name||'').localeCompare(b.name||''));
+}
+
+document.getElementById('btn-add-pointage').addEventListener('click', async () => {
+  await loadUsersForSelect();
+  const sel = document.getElementById('add-emp-select');
+  sel.innerHTML = allUsersCache.map(u =>
+    '<option value="' + u.id + '" data-name="' + (u.name||u.email) + '" data-team="' + (u.team||'sedentaire') + '">' + (u.name||u.email) + '</option>'
+  ).join('');
+  // Date par défaut = aujourd'hui
+  document.getElementById('add-date').value = new Date().toISOString().split('T')[0];
+  document.getElementById('add-err').textContent = '';
+  updateAddRecap();
+  document.getElementById('modal-add-pointage').style.display = 'flex';
+});
+
+function updateAddRecap() {
+  const startT = document.getElementById('add-start-time').value;
+  const endT = document.getElementById('add-end-time').value;
+  const dateV = document.getElementById('add-date').value;
+  if (!startT || !endT || !dateV) return;
+  const start = new Date(dateV + 'T' + startT);
+  const end = new Date(dateV + 'T' + endT);
+  const dur = (end - start) / 3600000;
+  const recap = document.getElementById('add-recap');
+  if (dur <= 0) {
+    recap.innerHTML = '<span style="color:#E24B4A;">⚠ L'heure de départ doit être après l'arrivée.</span>';
+  } else {
+    recap.innerHTML = '<b>Durée :</b> ' + formatDuration(dur) + ' — ' +
+      new Date(dateV + 'T' + startT).toLocaleDateString('fr-FR', {weekday:'long', day:'2-digit', month:'long', year:'numeric'});
+  }
+}
+
+['add-start-time','add-end-time','add-date'].forEach(id => {
+  document.getElementById(id).addEventListener('input', updateAddRecap);
+});
+
+document.getElementById('add-pointage-save').addEventListener('click', async () => {
+  const errEl = document.getElementById('add-err');
+  errEl.textContent = '';
+  const sel = document.getElementById('add-emp-select');
+  const uid = sel.value;
+  const opt = sel.options[sel.selectedIndex];
+  const empName = opt.dataset.name;
+  const empTeam = opt.dataset.team;
+  const dateV = document.getElementById('add-date').value;
+  const startT = document.getElementById('add-start-time').value;
+  const endT = document.getElementById('add-end-time').value;
+
+  if (!uid || !dateV || !startT || !endT) { errEl.textContent = 'Veuillez remplir tous les champs.'; return; }
+
+  const startDate = new Date(dateV + 'T' + startT + ':00');
+  const endDate = new Date(dateV + 'T' + endT + ':00');
+  const dur = (endDate - startDate) / 3600000;
+
+  if (dur <= 0) { errEl.textContent = 'L'heure de départ doit être après l'arrivée.'; return; }
+
+  const roundedStart = roundToQuarter(startDate);
+  const roundedEnd = roundToQuarter(endDate);
+  const roundedDur = (roundedEnd - roundedStart) / 3600000;
+
+  try {
+    await db.collection('pointages').add({
+      userId: uid,
+      userName: empName,
+      startTime: roundedStart.toISOString(),
+      endTime: roundedEnd.toISOString(),
+      duration: roundedDur,
+      date: dateV,
+      team: empTeam,
+      geo: null,
+      alert: null,
+      addedByAdmin: true
+    });
+    closeModal();
+    allPointagesData = []; // Force refresh
+  } catch(e) { errEl.textContent = 'Erreur : ' + e.message; }
 });
 
 // =============================================
