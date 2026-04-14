@@ -1972,7 +1972,7 @@ function updateAddRecap() {
   const dur = (end - start) / 3600000;
   const recap = document.getElementById('add-recap');
   if (dur <= 0) {
-    recap.innerHTML = '<span style="color:#E24B4A;">⚠ L'heure de départ doit être après l'arrivée.</span>';
+    recap.innerHTML = '<span style="color:#E24B4A;">⚠ Heure de depart invalide.</span>';
   } else {
     recap.innerHTML = '<b>Durée :</b> ' + formatDuration(dur) + ' — ' +
       new Date(dateV + 'T' + startT).toLocaleDateString('fr-FR', {weekday:'long', day:'2-digit', month:'long', year:'numeric'});
@@ -2001,7 +2001,7 @@ document.getElementById('add-pointage-save').addEventListener('click', async () 
   const endDate = new Date(dateV + 'T' + endT + ':00');
   const dur = (endDate - startDate) / 3600000;
 
-  if (dur <= 0) { errEl.textContent = 'L'heure de départ doit être après l'arrivée.'; return; }
+  if (dur <= 0) { errEl.textContent = 'Heure de depart invalide - doit etre apres l\'arrivee.'; return; }
 
   const roundedStart = roundToQuarter(startDate);
   const roundedEnd = roundToQuarter(endDate);
