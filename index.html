@@ -1597,30 +1597,6 @@ window.sendResetPassword = async (email, name) => {
     alert('Erreur : ' + e.code === 'auth/user-not-found' ? 'Aucun compte trouvé pour ' + email : e.message);
   }
 };
-
-// Modification email
-let editEmailUid = null;
-
-window.openEditEmailModal = (uid, currentEmail, name) => {
-  editEmailUid = uid;
-  document.getElementById('edit-email-title').textContent = 'Email de ' + name;
-  document.getElementById('new-email-input').value = currentEmail;
-  document.getElementById('edit-email-err').textContent = '';
-  document.getElementById('modal-edit-email').style.display = 'flex';
-};
-
-document.getElementById('edit-email-save').addEventListener('click', async () => {
-  const newEmail = document.getElementById('new-email-input').value.trim();
-  const errEl = document.getElementById('edit-email-err');
-  errEl.textContent = '';
-  if (!newEmail || !newEmail.includes('@')) { errEl.textContent = 'Adresse email invalide.'; return; }
-  try {
-    await db.collection('users').doc(editEmailUid).update({ email: newEmail });
-    closeModal();
-    alert('Email mis à jour dans le profil. Le compte Firebase reste inchangé.');
-  } catch(e) { errEl.textContent = 'Erreur : ' + e.message; }
-});
-
 window.toggleEmployee = async (uid, currentlyActive) => {
   if (!confirm(currentlyActive ? 'Désactiver cet employé ?' : 'Réactiver cet employé ?')) return;
   try {
