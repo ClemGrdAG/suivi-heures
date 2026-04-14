@@ -408,6 +408,21 @@ input:focus, select:focus { outline: none; border-color: var(--ag-gold); backgro
     </div>
   </div>
 
+  <!-- Modal modification email -->
+  <div class="modal-overlay" id="modal-edit-email" style="display:none">
+    <div class="modal">
+      <h3 id="edit-email-title">Modifier l'adresse email</h3>
+      <p style="font-size:13px;color:#666;margin-bottom:12px;">Le salarié devra utiliser cette nouvelle adresse pour se connecter.</p>
+      <label style="font-size:13px;color:#666;display:block;margin-bottom:4px">Nouvelle adresse email</label>
+      <input type="email" id="new-email-input" placeholder="nouvelle@adresse.fr" />
+      <div class="error" id="edit-email-err"></div>
+      <div class="modal-actions">
+        <button class="btn-secondary" onclick="closeModal()">Annuler</button>
+        <button class="btn-primary" id="edit-email-save">Enregistrer</button>
+      </div>
+    </div>
+  </div>
+
   <!-- Modal ajout pointage admin -->
   <div class="modal-overlay" id="modal-add-pointage" style="display:none">
     <div class="modal">
@@ -425,6 +440,21 @@ input:focus, select:focus { outline: none; border-color: var(--ag-gold); backgro
       <div class="modal-actions">
         <button class="btn-secondary" onclick="closeModal()">Annuler</button>
         <button class="btn-primary" id="add-pointage-save">Enregistrer</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Modal modification email -->
+  <div class="modal-overlay" id="modal-edit-email" style="display:none">
+    <div class="modal">
+      <h3 id="edit-email-title">Modifier l'adresse email</h3>
+      <p style="font-size:13px;color:#666;margin-bottom:12px;">Le salarié devra utiliser cette nouvelle adresse pour se connecter.</p>
+      <label style="font-size:13px;color:#666;display:block;margin-bottom:4px">Nouvelle adresse email</label>
+      <input type="email" id="new-email-input" placeholder="nouvelle@adresse.fr" />
+      <div class="error" id="edit-email-err"></div>
+      <div class="modal-actions">
+        <button class="btn-secondary" onclick="closeModal()">Annuler</button>
+        <button class="btn-primary" id="edit-email-save">Enregistrer</button>
       </div>
     </div>
   </div>
@@ -575,6 +605,7 @@ function closeModal() {
   document.getElementById('modal-conge-admin').style.display = 'none';
   document.getElementById('modal-solde').style.display = 'none';
   document.getElementById('modal-add-pointage').style.display = 'none';
+  document.getElementById('modal-edit-email').style.display = 'none';
 }
 function toLocalDatetime(isoStr) {
   const d = new Date(isoStr);
@@ -1500,9 +1531,11 @@ function listenEmployees() {
             <div class="emp-name">${u.name||'Sans nom'}</div>
             <div class="emp-sub">${u.email||''} · ${u.team==='itinerant'?'Itinérant':'Sédentaire'}</div>
           </div>
-          <div class="admin-row-actions">
+          <div class="admin-row-actions" style="flex-wrap:wrap;justify-content:flex-end;">
             <span style="font-size:11px;font-weight:600;padding:3px 8px;border-radius:10px;background:${soldeBg};color:${soldeColor};">${soldeStr}</span>
-            <button class="btn-sm btn-edit" onclick="openSoldeModal('${u.id}', '${u.name||''}', ${u.soldeInitial||0})">Solde initial</button>
+            <button class="btn-sm btn-edit" onclick="openSoldeModal('${u.id}', '${u.name||''}', ${u.soldeInitial||0})">Solde</button>
+            <button class="btn-sm btn-edit" onclick="openEditEmailModal('${u.id}', '${u.email||''}', '${u.name||''}')">Email</button>
+            <button class="btn-sm btn-edit" onclick="sendResetPassword('${u.email||''}', '${u.name||''}')">MDP</button>
             <span class="sbadge ${isActive?'s-present':'s-disabled'}">${isActive?'Actif':'Désactivé'}</span>
             <button class="btn-sm ${isActive?'btn-danger':'btn-edit'}" onclick="toggleEmployee('${u.id}', ${isActive})">
               ${isActive?'Désactiver':'Réactiver'}
@@ -1513,6 +1546,80 @@ function listenEmployees() {
     });
   } catch(e) { console.error(e); }
 }
+
+// Réinitialisation mot de passe
+window.sendResetPassword = async (email, name) => {
+  if (!email) { alert('Aucun email associé à ce compte.'); return; }
+  if (!confirm('Envoyer un email de réinitialisation du mot de passe à ' + name + ' (' + email + ') ?')) return;
+  try {
+    await auth.sendPasswordResetEmail(email);
+    alert('Email envoyé à ' + email + ' !');
+  } catch(e) {
+    if (e.code === 'auth/user-not-found') {
+      alert('Aucun compte Firebase trouvé pour ' + email);
+    } else {
+      alert('Erreur : ' + e.message);
+    }
+  }
+};
+
+// Modification email
+let editEmailUid = null;
+
+window.openEditEmailModal = (uid, currentEmail, name) => {
+  editEmailUid = uid;
+  document.getElementById('edit-email-title').textContent = 'Email de ' + name;
+  document.getElementById('new-email-input').value = currentEmail;
+  document.getElementById('edit-email-err').textContent = '';
+  document.getElementById('modal-edit-email').style.display = 'flex';
+};
+
+document.getElementById('edit-email-save').addEventListener('click', async () => {
+  const newEmail = document.getElementById('new-email-input').value.trim();
+  const errEl = document.getElementById('edit-email-err');
+  errEl.textContent = '';
+  if (!newEmail || !newEmail.includes('@')) { errEl.textContent = 'Adresse email invalide.'; return; }
+  try {
+    await db.collection('users').doc(editEmailUid).update({ email: newEmail });
+    closeModal();
+    alert('Email mis à jour. Le salarié devra utiliser cette adresse pour se connecter.');
+  } catch(e) { errEl.textContent = 'Erreur : ' + e.message; }
+});
+
+// Réinitialisation mot de passe
+window.sendResetPassword = async (email, name) => {
+  if (!email) { alert('Aucun email associé à ce compte.'); return; }
+  if (!confirm('Envoyer un email de réinitialisation à ' + name + ' (' + email + ') ?')) return;
+  try {
+    await auth.sendPasswordResetEmail(email);
+    alert('Email envoyé à ' + email + ' !');
+  } catch(e) {
+    alert('Erreur : ' + e.code === 'auth/user-not-found' ? 'Aucun compte trouvé pour ' + email : e.message);
+  }
+};
+
+// Modification email
+let editEmailUid = null;
+
+window.openEditEmailModal = (uid, currentEmail, name) => {
+  editEmailUid = uid;
+  document.getElementById('edit-email-title').textContent = 'Email de ' + name;
+  document.getElementById('new-email-input').value = currentEmail;
+  document.getElementById('edit-email-err').textContent = '';
+  document.getElementById('modal-edit-email').style.display = 'flex';
+};
+
+document.getElementById('edit-email-save').addEventListener('click', async () => {
+  const newEmail = document.getElementById('new-email-input').value.trim();
+  const errEl = document.getElementById('edit-email-err');
+  errEl.textContent = '';
+  if (!newEmail || !newEmail.includes('@')) { errEl.textContent = 'Adresse email invalide.'; return; }
+  try {
+    await db.collection('users').doc(editEmailUid).update({ email: newEmail });
+    closeModal();
+    alert('Email mis à jour dans le profil. Le compte Firebase reste inchangé.');
+  } catch(e) { errEl.textContent = 'Erreur : ' + e.message; }
+});
 
 window.toggleEmployee = async (uid, currentlyActive) => {
   if (!confirm(currentlyActive ? 'Désactiver cet employé ?' : 'Réactiver cet employé ?')) return;
