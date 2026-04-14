@@ -537,6 +537,7 @@ let CU = null, UP = null, geo = null, timerInt = null, badgeTime = null, isBadge
 let unsubHist = null, unsubTeam = null, unsubAllPointages = null, unsubEmployees = null;
 let isAdmin = false;
 let allPointagesData = [];
+const geoAddrCache = {}; // cache coordonnées -> adresse
 let editDocId = null, deleteDocId = null;
 const DAYS = ['Lun','Mar','Mer','Jeu','Ven'];
 
@@ -984,6 +985,11 @@ function listenHistory() {
         return;
       }
       const entries = snap.docs.map(d => d.data()).slice(0,60);
+      // Précharger les adresses pour les itinérants
+      const itinEntries = entries.filter(e => e.team === 'itinerant');
+      if (itinEntries.length) {
+        await preloadGeoAddresses(itinEntries);
+      }
 
       // Calculer le cumul de la semaine en cours
       const now2 = new Date();
@@ -1069,12 +1075,14 @@ function listenHistory() {
             const isItin = e.team === 'itinerant';
             let locHtml = '';
             if (isItin) {
-              const startCoords = e.geoStart ? e.geoStart.lat + ',' + e.geoStart.lng : (e.geo ? e.geo.lat + ',' + e.geo.lng : null);
-              const endCoords = e.geoEnd ? e.geoEnd.lat + ',' + e.geoEnd.lng : null;
-              if (startCoords || endCoords) {
+              const gsKey = e.geoStart ? e.geoStart.lat + ',' + e.geoStart.lng : (e.geo ? e.geo.lat + ',' + e.geo.lng : null);
+              const geKey = e.geoEnd ? e.geoEnd.lat + ',' + e.geoEnd.lng : null;
+              const addrS = gsKey ? (geoAddrCache[gsKey] || gsKey) : null;
+              const addrE = geKey ? (geoAddrCache[geKey] || geKey) : null;
+              if (addrS || addrE) {
                 locHtml = '<div style="font-size:11px;color:#888;margin-top:3px;">' +
-                  (startCoords ? '📍 Arrivée : ' + startCoords : '') +
-                  (endCoords ? ' &nbsp;→&nbsp; 📍 Départ : ' + endCoords : '') +
+                  (addrS ? '📍 Arrivée : ' + addrS : '') +
+                  (addrE ? '<br>📍 Départ : ' + addrE : '') +
                   '</div>';
               }
             } else {
@@ -1379,6 +1387,9 @@ function listenAllPointages() {
   try {
     unsubAllPointages = db.collection('pointages').orderBy('endTime','desc').onSnapshot(snap => {
       allPointagesData = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+      // Précharger les adresses des itinérants
+      const itinData = allPointagesData.filter(e => e.team === 'itinerant');
+      if (itinData.length) preloadGeoAddresses(itinData);
       renderAllPointages();
       updateAdminStats();
     });
@@ -1405,13 +1416,15 @@ function renderAllPointages() {
     const en = end.toLocaleTimeString('fr-FR',{hour:'2-digit',minute:'2-digit'});
     const alertIcon = e.alert ? '<span style="font-size:11px;color:#A32D2D;background:#FDEAEA;border-radius:5px;padding:1px 6px;margin-left:6px;">⚠ ' + e.alert + '</span>' : '';
     const isItin = e.team === 'itinerant';
-    const startCoords = e.geoStart ? e.geoStart.lat + ',' + e.geoStart.lng : (e.geo ? e.geo.lat + ',' + e.geo.lng : null);
-    const endCoords = e.geoEnd ? e.geoEnd.lat + ',' + e.geoEnd.lng : null;
+    const gsKeyA = e.geoStart ? e.geoStart.lat + ',' + e.geoStart.lng : (e.geo ? e.geo.lat + ',' + e.geo.lng : null);
+    const geKeyA = e.geoEnd ? e.geoEnd.lat + ',' + e.geoEnd.lng : null;
+    const addrStartA = gsKeyA ? (geoAddrCache[gsKeyA] || gsKeyA) : null;
+    const addrEndA = geKeyA ? (geoAddrCache[geKeyA] || geKeyA) : null;
     const locLine = isItin
-      ? (startCoords || endCoords
+      ? (addrStartA || addrEndA
           ? '<div style="font-size:11px;color:#888;margin-top:2px;">' +
-            (startCoords ? '📍 Arrivée : ' + startCoords : '') +
-            (endCoords ? ' &nbsp;→&nbsp; 📍 Départ : ' + endCoords : '') +
+            (addrStartA ? '📍 Arrivée : ' + addrStartA : '') +
+            (addrEndA ? '<br>📍 Départ : ' + addrEndA : '') +
             '</div>'
           : '<div style="font-size:11px;color:#bbb;margin-top:2px;">📍 Position non enregistrée</div>')
       : '<div style="font-size:11px;color:#bbb;margin-top:2px;">🏢 Bureau</div>';
@@ -1672,6 +1685,45 @@ async function reverseGeocode(lat, lng) {
     return data.display_name || (lat + ', ' + lng);
   } catch(e) {
     return lat + ', ' + lng;
+  }
+}
+
+async function getAddress(lat, lng) {
+  const key = lat + ',' + lng;
+  if (geoAddrCache[key]) return geoAddrCache[key];
+  const addr = await reverseGeocode(lat, lng);
+  // Simplifier l'adresse : garder numéro + rue + ville
+  try {
+    const res = await fetch(`https://nominatim.openstreetmap.org/reverse?lat=${lat}&lon=${lng}&format=json`, {
+      headers: { 'Accept-Language': 'fr' }
+    });
+    const data = await res.json();
+    const a = data.address || {};
+    const short = [
+      (a.house_number || ''),
+      (a.road || a.pedestrian || a.street || ''),
+      (a.city || a.town || a.village || a.municipality || '')
+    ].filter(Boolean).join(' ');
+    geoAddrCache[key] = short || data.display_name || key;
+  } catch(e) {
+    geoAddrCache[key] = key;
+  }
+  return geoAddrCache[key];
+}
+
+async function preloadGeoAddresses(entries) {
+  const keys = new Set();
+  entries.forEach(e => {
+    if (e.geoStart) keys.add(e.geoStart.lat + '|' + e.geoStart.lng);
+    if (e.geoEnd) keys.add(e.geoEnd.lat + '|' + e.geoEnd.lng);
+    if (e.geo && !e.geoStart) keys.add(e.geo.lat + '|' + e.geo.lng);
+  });
+  for (const key of keys) {
+    const [lat, lng] = key.split('|');
+    if (!geoAddrCache[lat + ',' + lng]) {
+      await getAddress(lat, lng);
+      await new Promise(r => setTimeout(r, 200)); // respecter limites OSM
+    }
   }
 }
 
