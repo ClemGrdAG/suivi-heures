@@ -847,7 +847,17 @@ document.getElementById('badge-btn').addEventListener('click', async () => {
       startTimer(); updateBadgeUI(true);
     } catch(e) { isBadged = false; badgeTime = null; alert('Erreur de connexion.'); }
   } else {
-    // Pour le départ d'un itinérant, rafraîchir la position
+    // Pour le départ d'un itinérant, géolocalisation obligatoire
+    if (isItinerant && !geo) {
+      const geoErr = document.getElementById('geo-txt');
+      geoErr.style.color = '#E24B4A';
+      geoErr.style.fontWeight = '500';
+      geoErr.textContent = '⚠ Veuillez cliquer sur "Me localiser" avant de pointer le départ';
+      document.getElementById('geo-btn').style.borderColor = '#E24B4A';
+      document.getElementById('geo-btn').style.color = '#E24B4A';
+      return;
+    }
+    // Rafraîchir la position GPS au départ
     if (isItinerant && geo) {
       await new Promise(resolve => {
         navigator.geolocation.getCurrentPosition(
