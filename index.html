@@ -444,41 +444,6 @@ input:focus, select:focus { outline: none; border-color: var(--ag-gold); backgro
     </div>
   </div>
 
-  <!-- Modal modification email -->
-  <div class="modal-overlay" id="modal-edit-email" style="display:none">
-    <div class="modal">
-      <h3 id="edit-email-title">Modifier l'adresse email</h3>
-      <p style="font-size:13px;color:#666;margin-bottom:12px;">Le salarié devra utiliser cette nouvelle adresse pour se connecter.</p>
-      <label style="font-size:13px;color:#666;display:block;margin-bottom:4px">Nouvelle adresse email</label>
-      <input type="email" id="new-email-input" placeholder="nouvelle@adresse.fr" />
-      <div class="error" id="edit-email-err"></div>
-      <div class="modal-actions">
-        <button class="btn-secondary" onclick="closeModal()">Annuler</button>
-        <button class="btn-primary" id="edit-email-save">Enregistrer</button>
-      </div>
-    </div>
-  </div>
-
-  <!-- Modal ajout pointage admin -->
-  <div class="modal-overlay" id="modal-add-pointage" style="display:none">
-    <div class="modal">
-      <h3>Ajouter un pointage</h3>
-      <label style="font-size:13px;color:#666;display:block;margin-bottom:4px">Salarié</label>
-      <select id="add-emp-select" style="margin-bottom:10px;"></select>
-      <label style="font-size:13px;color:#666;display:block;margin-bottom:4px">Date</label>
-      <input type="date" id="add-date" style="margin-bottom:10px;" />
-      <label style="font-size:13px;color:#666;display:block;margin-bottom:4px">Heure d'arrivée</label>
-      <input type="time" id="add-start-time" value="08:00" style="margin-bottom:10px;" />
-      <label style="font-size:13px;color:#666;display:block;margin-bottom:4px">Heure de départ</label>
-      <input type="time" id="add-end-time" value="17:00" style="margin-bottom:10px;" />
-      <div id="add-recap" style="font-size:13px;background:#f7f7fb;border-radius:8px;padding:10px;margin-bottom:8px;color:#555;"></div>
-      <div class="error" id="add-err"></div>
-      <div class="modal-actions">
-        <button class="btn-secondary" onclick="closeModal()">Annuler</button>
-        <button class="btn-primary" id="add-pointage-save">Enregistrer</button>
-      </div>
-    </div>
-  </div>
 
   <!-- Modal solde initial -->
   <div class="modal-overlay" id="modal-solde" style="display:none">
