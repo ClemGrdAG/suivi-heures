@@ -810,61 +810,60 @@ function showHoraireAlert(msg, isWarning) {
   el.innerHTML = '⚠ ' + msg;
 }
 
+// Variables geo séparées pour arrivée et départ
+let geoStart = null; // position au badge IN
+let geoEnd = null;   // position au badge OUT
+
 document.getElementById('badge-btn').addEventListener('click', async () => {
   const now = new Date();
   const isItinerant = UP?.team === 'itinerant';
-
-  // Bloquer si itinérant sans géolocalisation
-  if (!isBadged && isItinerant && !geo) {
-    const geoErr = document.getElementById('geo-txt');
-    geoErr.style.color = '#E24B4A';
-    geoErr.style.fontWeight = '500';
-    geoErr.textContent = '⚠ Veuillez cliquer sur "Me localiser" avant de pointer';
-    document.getElementById('geo-btn').style.borderColor = '#E24B4A';
-    document.getElementById('geo-btn').style.color = '#E24B4A';
-    return;
-  }
+  const geoErr = document.getElementById('geo-txt');
+  const geoBtn = document.getElementById('geo-btn');
 
   if (!isBadged) {
+    // BADGE IN — bloquer itinérant sans geo
+    if (isItinerant && !geoStart) {
+      geoErr.style.color = '#E24B4A';
+      geoErr.style.fontWeight = '500';
+      geoErr.textContent = '⚠ Veuillez cliquer sur "Me localiser" avant de pointer l\'arrivée';
+      geoBtn.style.borderColor = '#E24B4A';
+      geoBtn.style.color = '#E24B4A';
+      return;
+    }
     isBadged = true; badgeTime = now.toISOString();
+    geoEnd = null; // réinitialiser la geo de départ
     // Vérification horaire arrivée
     const inViolations = await checkHoraires('in', now);
     const inAlert = inViolations.length > 0 ? inViolations[0] : null;
-    if (inAlert) {
-      showHoraireAlert(inAlert, true);
-    } else {
-      showHoraireAlert('', false);
+    if (inAlert) { showHoraireAlert(inAlert, true); } else { showHoraireAlert('', false); }
+    // Mettre à jour le bouton geo pour indiquer qu'il faut pointer la position de départ
+    if (isItinerant) {
+      geoErr.textContent = '✓ Position arrivée enregistrée — vous devrez relocaliser au départ';
+      geoErr.style.color = '#854F0B';
+      geoEnd = null; // forcer re-localisation au départ
     }
     try {
       await db.collection('badges').doc(CU.uid).set({
         active: true, startTime: badgeTime,
         userId: CU.uid, userName: UP?.name || CU.email,
-        team: UP?.team || 'sedentaire', geo: geo || null,
+        team: UP?.team || 'sedentaire',
+        geoStart: geoStart || null,
         alert: inAlert || null,
         lastAlert: inAlert || null,
         lastAlertTime: inAlert ? now.toISOString() : null
       });
       startTimer(); updateBadgeUI(true);
     } catch(e) { isBadged = false; badgeTime = null; alert('Erreur de connexion.'); }
+
   } else {
-    // Pour le départ d'un itinérant, géolocalisation obligatoire
-    if (isItinerant && !geo) {
-      const geoErr = document.getElementById('geo-txt');
+    // BADGE OUT — bloquer itinérant sans geo départ
+    if (isItinerant && !geoEnd) {
       geoErr.style.color = '#E24B4A';
       geoErr.style.fontWeight = '500';
-      geoErr.textContent = '⚠ Veuillez cliquer sur "Me localiser" avant de pointer le départ';
-      document.getElementById('geo-btn').style.borderColor = '#E24B4A';
-      document.getElementById('geo-btn').style.color = '#E24B4A';
+      geoErr.textContent = '⚠ Veuillez cliquer sur "Me localiser" pour enregistrer votre position de départ';
+      geoBtn.style.borderColor = '#E24B4A';
+      geoBtn.style.color = '#E24B4A';
       return;
-    }
-    // Rafraîchir la position GPS au départ
-    if (isItinerant && geo) {
-      await new Promise(resolve => {
-        navigator.geolocation.getCurrentPosition(
-          p => { geo = {lat: p.coords.latitude.toFixed(5), lng: p.coords.longitude.toFixed(5)}; resolve(); },
-          () => resolve()
-        );
-      });
     }
 
     // Vérification horaire départ
@@ -884,12 +883,14 @@ document.getElementById('badge-btn').addEventListener('click', async () => {
       await db.collection('pointages').add({
         userId: CU.uid, userName: UP?.name || CU.email,
         startTime: roundedStart.toISOString(), endTime: roundedEnd.toISOString(),
-        duration: dur, geo: geo || null,
+        duration: dur,
+        geoStart: geoStart || null,
+        geoEnd: geoEnd || null,
+        geo: geoStart || null, // compatibilité avec l'ancien champ
         team: UP?.team || 'sedentaire',
         date: roundedEnd.toISOString().split('T')[0],
         alert: alertMsg || null
       });
-      // Enregistrer l'alerte dans le badge pour que l'admin la voie
       await db.collection('badges').doc(CU.uid).set({
         active: false, userId: CU.uid,
         userName: UP?.name || CU.email,
@@ -897,15 +898,14 @@ document.getElementById('badge-btn').addEventListener('click', async () => {
         lastAlert: alertMsg || null,
         lastAlertTime: alertMsg ? now.toISOString() : null
       });
-      isBadged = false; badgeTime = null; geo = null;
+      isBadged = false; badgeTime = null; geoStart = null; geoEnd = null;
       clearInterval(timerInt);
       document.getElementById('timer').textContent = '00:00:00';
-      const geoEl = document.getElementById('geo-txt');
-      geoEl.textContent = '';
-      geoEl.style.color = '';
-      geoEl.style.fontWeight = '';
-      document.getElementById('geo-btn').style.borderColor = '';
-      document.getElementById('geo-btn').style.color = '';
+      geoErr.textContent = '';
+      geoErr.style.color = '';
+      geoErr.style.fontWeight = '';
+      geoBtn.style.borderColor = '';
+      geoBtn.style.color = '';
       updateBadgeUI(false);
       renderWeek(); renderStats();
     } catch(e) { alert('Erreur lors de la sauvegarde.'); }
@@ -945,8 +945,17 @@ function triggerGeo() {
   btn.style.color = '';
   navigator.geolocation.getCurrentPosition(
     p => {
-      geo = {lat: p.coords.latitude.toFixed(5), lng: p.coords.longitude.toFixed(5)};
-      el.textContent = '✓ Position enregistrée';
+      const pos = {lat: p.coords.latitude.toFixed(5), lng: p.coords.longitude.toFixed(5)};
+      geo = pos; // compatibilité
+      if (!isBadged) {
+        // Badge IN : stocker position arrivée
+        geoStart = pos;
+        el.textContent = '✓ Position arrivée enregistrée';
+      } else {
+        // Badge OUT : stocker position départ
+        geoEnd = pos;
+        el.textContent = '✓ Position départ enregistrée';
+      }
       el.style.color = '#1D9E75';
       el.style.fontWeight = '500';
       btn.style.borderColor = '#1D9E75';
@@ -1657,7 +1666,13 @@ document.getElementById('export-csv').addEventListener('click', async () => {
   try {
     // Géocodage de toutes les positions uniques
     const geoCache = {};
-    const uniqueGeos = [...new Set(allPointagesData.filter(e => e.geo).map(e => e.geo.lat + ',' + e.geo.lng))];
+    const allGeoKeys = new Set();
+    allPointagesData.forEach(e => {
+      if (e.geoStart) allGeoKeys.add(e.geoStart.lat + ',' + e.geoStart.lng);
+      if (e.geoEnd) allGeoKeys.add(e.geoEnd.lat + ',' + e.geoEnd.lng);
+      if (e.geo && !e.geoStart) allGeoKeys.add(e.geo.lat + ',' + e.geo.lng);
+    });
+    const uniqueGeos = [...allGeoKeys];
     for (const key of uniqueGeos) {
       const [lat, lng] = key.split(',');
       geoCache[key] = await reverseGeocode(lat, lng);
@@ -1709,7 +1724,8 @@ document.getElementById('export-csv').addEventListener('click', async () => {
           for (const e of entries) {
             const start = new Date(e.startTime), end = new Date(e.endTime);
             const geoKey = e.geo ? e.geo.lat + ',' + e.geo.lng : null;
-            const address = geoKey ? (geoCache[geoKey] || '') : 'Non enregistrée';
+            const geoKey = e.geoStart ? e.geoStart.lat + ',' + e.geoStart.lng : (e.geo ? e.geo.lat + ',' + e.geo.lng : null);
+            const address = geoKey ? (geoCache[geoKey] || '') : 'Non enregistrée'; // kept for compat
             rows.push([
               empName,
               weekLabel,
