@@ -809,7 +809,7 @@ async function checkHoraires(type, time) {
     if (sessionsToday === 0) {
       // 1er badgeage = arrivée du matin → doit être avant 10h00
       if (totalMins > 10 * 60) {
-        violations.push('Arrivée tardive — vous devez être arrivé avant 10h00 (' + h + 'h' + String(m).padStart(2,'0') + ' enregistré).');
+        violations.push('Arrivée tardive — ' + h + 'h' + String(m).padStart(2,'0') + ' enregistré. T\'es en retard ! Tu peux aller chercher des pains au chocolat ! 🍫');
       }
     } else {
       // 2ème badgeage IN = retour pause déjeuner → doit être avant 14h00
