@@ -979,7 +979,7 @@ function listenHistory() {
   unsubHist = db.collection('pointages')
     .where('userId', '==', CU.uid)
     .orderBy('endTime', 'desc')
-    .onSnapshot(async snap => {
+    .onSnapshot(snap => {
       if (snap.empty) {
         el.innerHTML = '<div class="empty-state">Aucun pointage enregistré.<br><small>Pointez une arrivée puis un départ pour voir l\'historique.</small></div>';
         return;
@@ -988,8 +988,17 @@ function listenHistory() {
       // Précharger les adresses pour les itinérants
       const itinEntries = entries.filter(e => e.team === 'itinerant');
       if (itinEntries.length) {
-      if (itinEntries.length) preloadGeoAddresses(itinEntries).then(() => renderHistory(entries, el, monDate));
+        preloadGeoAddresses(itinEntries).then(() => buildHistoryHTML(entries, el));
+        return;
       }
+      buildHistoryHTML(entries, el);
+    }, err => {
+      el.innerHTML = '<div class="empty-state" style="color:#E24B4A">Erreur : ' + err.message + '</div>';
+      console.error('Historique erreur:', err);
+    });
+}
+
+function buildHistoryHTML(entries, el) {
 
       // Calculer le cumul de la semaine en cours
       const now2 = new Date();
