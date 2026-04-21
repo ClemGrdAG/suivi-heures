@@ -2103,12 +2103,10 @@ document.getElementById('conge-delete').addEventListener('click', async () => {
 let allUsersCache = [];
 
 async function loadUsersForSelect() {
-  // Toujours recharger pour avoir la liste à jour
-  // Ne pas filtrer sur active pour inclure tous les comptes
+  // Charger tous les utilisateurs sans aucun filtre
   const snap = await db.collection('users').get();
   allUsersCache = snap.docs
     .map(d => ({ id: d.id, ...d.data() }))
-    .filter(u => u.active !== false) // inclut les users sans champ active
     .sort((a,b) => (a.name||'').localeCompare(b.name||''));
 }
 
