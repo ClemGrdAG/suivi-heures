@@ -720,6 +720,7 @@ async function loadProfile() {
       document.getElementById('u-name').textContent = UP.name || CU.email;
       document.getElementById('p-name').value = UP.name || '';
       document.querySelectorAll('input[name="pteam"]').forEach(r => r.checked = r.value === (UP.team || 'sedentaire'));
+      if (document.getElementById('p-contrat')) document.getElementById('p-contrat').value = UP.contrat || 'c1';
     }
   } catch(e) { console.error(e); }
 }
@@ -1257,6 +1258,40 @@ async function renderStats() {
   await renderWeeklyRecap();
 }
 
+// Calcule l'objectif hebdomadaire selon le contrat et les jours de congé
+function getWeeklyObjectif(contrat, weekKey, cpDaysByWeek) {
+  const cpDays = cpDaysByWeek[weekKey] || 0;
+
+  // Déterminer l'objectif de base selon le contrat
+  let objectifBase = 35; // Contrat 1 par défaut
+  let joursTravailles = 5;
+
+  if (contrat === 'c2') {
+    // 35h lundi-jeudi + vendredi matin (3h30)
+    // = 7.875h/jour x4 + 3.5h = 35h
+    objectifBase = 35;
+    joursTravailles = 4.5;
+  } else if (contrat === 'c3') {
+    // Semaines impaires = 4 jours (8h45/jour), paires = 5 jours (7h/jour)
+    const weekNum = getWeekNumber(new Date(weekKey));
+    objectifBase = 35;
+    joursTravailles = weekNum % 2 !== 0 ? 4 : 5;
+  }
+
+  // Réduire l'objectif proportionnellement aux jours de CP
+  const hParJour = objectifBase / joursTravailles;
+  const reduction = Math.min(cpDays, joursTravailles) * hParJour;
+  return Math.max(0, objectifBase - reduction);
+}
+
+function getWeekNumber(date) {
+  const d = new Date(Date.UTC(date.getFullYear(), date.getMonth(), date.getDate()));
+  const dayNum = d.getUTCDay() || 7;
+  d.setUTCDate(d.getUTCDate() + 4 - dayNum);
+  const yearStart = new Date(Date.UTC(d.getUTCFullYear(), 0, 1));
+  return Math.ceil((((d - yearStart) / 86400000) + 1) / 7);
+}
+
 function formatSolde(h) {
   const sign = h >= 0 ? '+' : '-';
   const abs = Math.abs(h);
@@ -1308,19 +1343,49 @@ async function renderWeeklyRecap() {
     const userSnap = await db.collection('users').doc(CU.uid).get();
     const soldeInitial = userSnap.exists ? (userSnap.data().soldeInitial || 0) : 0;
 
-    // Récupérer les récups validées pour les déduire du solde
-    const recupSnap = await db.collection('conges')
+    // Récupérer TOUS les congés validés pour ajuster l'objectif hebdomadaire
+    const congesSnap = await db.collection('conges')
       .where('userId', '==', CU.uid)
-      .where('type', '==', 'rtt')
       .where('status', '==', 'approved')
       .get();
-    const recupDeduction = recupSnap.docs.reduce((a, d) => a + (d.data().hoursImpact || 0), 0);
 
-    // Calculer le solde total (toutes semaines SAUF semaine en cours) + solde initial - récups
+    // Calculer les jours de CP par semaine (réduit l'objectif de 7h/jour)
+    // Et les récups (déduites du solde)
+    const cpDaysByWeek = {}; // wkKey -> nb jours CP
+    let recupDeduction = 0;
+
+    congesSnap.docs.forEach(d => {
+      const c = d.data();
+      if (c.type === 'rtt') {
+        recupDeduction += c.hoursImpact || 0;
+      } else if (c.type === 'cp' || c.type === 'maladie' || c.type === 'autre') {
+        // Compter les jours ouvrés de congé par semaine
+        const cur = new Date(c.start);
+        const end = new Date(c.end);
+        while (cur <= end) {
+          const wd = cur.getDay();
+          if (wd !== 0 && wd !== 6) { // jours ouvrés seulement
+            const wdNum = wd || 7;
+            const mon = new Date(cur);
+            mon.setDate(cur.getDate() - wdNum + 1);
+            mon.setHours(0,0,0,0);
+            const wk = mon.toISOString().split('T')[0];
+            if (!cpDaysByWeek[wk]) cpDaysByWeek[wk] = 0;
+            // Demi-journée = 0.5 jour
+            cpDaysByWeek[wk] += (c.duree === 'half_am' || c.duree === 'half_pm') ? 0.5 : 1;
+          }
+          cur.setDate(cur.getDate() + 1);
+        }
+      }
+    });
+
+    // Calculer le solde total — objectif ajusté par contrat et CP
     let soldeTotal = soldeInitial - recupDeduction;
+    const userContrat = UP?.contrat || 'c1';
     Object.entries(weeks).forEach(([key, w]) => {
       if (key !== thisWeekKey) {
-        soldeTotal += w.total - 35;
+        const objectif = getWeeklyObjectif(userContrat, key, cpDaysByWeek);
+        soldeTotal += w.total - objectif;
       }
     });
 
@@ -1355,9 +1420,11 @@ async function renderWeeklyRecap() {
       const fri = new Date(w.mon); fri.setDate(w.mon.getDate() + 4);
       const friStr = fri.toLocaleDateString('fr-FR', {day:'2-digit', month:'2-digit'});
       const isThisWeek = key === thisWeekKey;
-      const pct = Math.min(Math.round((w.total / 35) * 100), 100);
-      const color = w.total > 35 ? '#7F77DD' : (w.total >= 34.9 ? '#1D9E75' : '#E24B4A');
-      const delta = w.total - 35;
+      const objectifSem = getWeeklyObjectif(UP?.contrat || 'c1', key, cpDaysByWeek);
+      const cpDays = cpDaysByWeek[key] || 0;
+      const pct = Math.min(Math.round((w.total / (objectifSem || 35)) * 100), 100);
+      const color = w.total >= objectifSem ? (w.total > objectifSem ? '#7F77DD' : '#1D9E75') : '#E24B4A';
+      const delta = w.total - objectifSem;
       const deltaStr = formatSolde(delta);
       const deltaColor = delta >= 0 ? '#1D9E75' : '#E24B4A';
       const deltaBg = delta >= 0 ? '#E1F5EE' : '#FDEAEA';
@@ -1376,7 +1443,7 @@ async function renderWeeklyRecap() {
         '<div style="height:6px; background:#f0f0f0; border-radius:3px; overflow:hidden;">' +
         '<div style="height:100%; width:' + pct + '%; background:' + color + '; border-radius:3px;"></div>' +
         '</div>' +
-        '<div style="font-size:11px; color:#aaa; margin-top:4px;">' + w.days.size + ' jour' + (w.days.size > 1 ? 's' : '') + ' travaillé' + (w.days.size > 1 ? 's' : '') + ' · objectif 35h</div>' +
+        '<div style="font-size:11px; color:#aaa; margin-top:4px;">' + w.days.size + ' jour' + (w.days.size > 1 ? 's' : '') + ' travaillé' + (w.days.size > 1 ? 's' : '') + (cpDays > 0 ? ' · ' + cpDays + ' j. CP · objectif ' + formatDuration(objectifSem) : ' · objectif 35h') + '</div>' +
         '</div>';
     }).join('');
 
@@ -1516,9 +1583,18 @@ async function computeAllSoldes() {
     });
 
     employeesSolde = {};
-    Object.entries(byUser).forEach(([uid, weeks]) => {
+    // Map uid -> contrat
+    const userContracts = {};
+    usersSnap.docs.forEach(d => { userContracts[d.id] = d.data().contrat || 'c1'; });
+
+    Object.entries(byUser).forEach(([uid, weekData]) => {
       const base = soldesInitiaux[uid] || 0;
-      employeesSolde[uid] = base + Object.values(weeks).reduce((a, h) => a + (h - 35), 0);
+      const contrat = userContracts[uid] || 'c1';
+      const solde = Object.entries(weekData).reduce((a, [wk, h]) => {
+        const obj = getWeeklyObjectif(contrat, wk, {}); // sans CP pour simplifier ici
+        return a + (h - obj);
+      }, 0);
+      employeesSolde[uid] = base + solde;
     });
 
     // Ajouter les users avec solde initial mais sans pointages
@@ -1526,16 +1602,32 @@ async function computeAllSoldes() {
       if (si !== 0 && !employeesSolde[uid]) employeesSolde[uid] = si;
     });
 
-    // Déduire les récups validées
-    const recupSnap = await db.collection('conges')
-      .where('type', '==', 'rtt')
+    // Récupérer TOUS les congés validés pour ajuster les objectifs
+    const allCongesSnap = await db.collection('conges')
       .where('status', '==', 'approved')
       .get();
-    recupSnap.docs.forEach(d => {
+
+    allCongesSnap.docs.forEach(d => {
       const c = d.data();
-      if (!c.userId || !c.hoursImpact) return;
-      if (!employeesSolde[c.userId]) employeesSolde[c.userId] = soldesInitiaux[c.userId] || 0;
-      employeesSolde[c.userId] -= c.hoursImpact;
+      if (!c.userId) return;
+      if (c.type === 'rtt') {
+        // Déduire les récups
+        if (!employeesSolde[c.userId]) employeesSolde[c.userId] = soldesInitiaux[c.userId] || 0;
+        employeesSolde[c.userId] -= (c.hoursImpact || 0);
+      } else {
+        // CP/maladie/autre : ajouter 7h par jour de congé à l'objectif réduit
+        const cur = new Date(c.start);
+        const end = new Date(c.end);
+        while (cur <= end) {
+          const wd = cur.getDay();
+          if (wd !== 0 && wd !== 6) {
+            const hours = (c.duree === 'half_am' || c.duree === 'half_pm') ? 3.5 : 7;
+            if (!employeesSolde[c.userId]) employeesSolde[c.userId] = soldesInitiaux[c.userId] || 0;
+            employeesSolde[c.userId] += hours; // réduire l'objectif = ajouter au solde
+          }
+          cur.setDate(cur.getDate() + 1);
+        }
+      }
     });
 
   } catch(e) { console.error(e); }
@@ -1561,7 +1653,7 @@ function listenEmployees() {
           <div class="avatar ${isActive?'':'inactive'}">${ini}</div>
           <div class="admin-row-info">
             <div class="emp-name">${u.name||'Sans nom'}</div>
-            <div class="emp-sub">${u.email||''} · ${u.team==='itinerant'?'Itinérant':'Sédentaire'}</div>
+            <div class="emp-sub">${u.email||''} · ${u.team==='itinerant'?'Itinérant':'Sédentaire'} · ${u.contrat==='c2'?'Contrat 2':u.contrat==='c3'?'Contrat 3':'Contrat 1'}</div>
           </div>
           <div class="admin-row-actions" style="flex-wrap:wrap;justify-content:flex-end;">
             <span style="font-size:11px;font-weight:600;padding:3px 8px;border-radius:10px;background:${soldeBg};color:${soldeColor};">${soldeStr}</span>
