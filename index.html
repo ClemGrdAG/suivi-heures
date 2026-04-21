@@ -1708,6 +1708,29 @@ window.sendResetPassword = async (email, name) => {
 };
 
 // Modification email
+// =============================================
+// TYPE DE CONTRAT (admin)
+// =============================================
+let currentContratUid = null;
+
+window.openContratModal = (uid, name, currentContrat) => {
+  currentContratUid = uid;
+  document.getElementById('modal-contrat-title').textContent = 'Contrat de ' + name;
+  document.getElementById('contrat-select').value = currentContrat || 'c1';
+  document.getElementById('contrat-err').textContent = '';
+  document.getElementById('modal-contrat').style.display = 'flex';
+};
+
+document.getElementById('contrat-save').addEventListener('click', async () => {
+  const contrat = document.getElementById('contrat-select').value;
+  try {
+    await db.collection('users').doc(currentContratUid).update({ contrat });
+    closeModal();
+  } catch(e) {
+    document.getElementById('contrat-err').textContent = 'Erreur : ' + e.message;
+  }
+});
+
 let editEmailUid = null;
 
 window.openEditEmailModal = (uid, currentEmail, name) => {
@@ -1797,11 +1820,17 @@ document.getElementById('modal-confirm-delete').addEventListener('click', async 
 // Géocodage inverse via OpenStreetMap
 async function reverseGeocode(lat, lng) {
   try {
-    const res = await fetch(`https://nominatim.openstreetmap.org/reverse?lat=${lat}&lon=${lng}&format=json`, {
-      headers: { 'Accept-Language': 'fr' }
-    });
+    // Utiliser un proxy CORS pour contourner les restrictions GitHub Pages
+    const url = 'https://nominatim.openstreetmap.org/reverse?lat=' + lat + '&lon=' + lng + '&format=json&accept-language=fr';
+    const res = await fetch('https://corsproxy.io/?' + encodeURIComponent(url));
     const data = await res.json();
-    return data.display_name || (lat + ', ' + lng);
+    const a = data.address || {};
+    const short = [
+      (a.house_number || ''),
+      (a.road || a.pedestrian || a.street || ''),
+      (a.city || a.town || a.village || a.municipality || '')
+    ].filter(Boolean).join(' ');
+    return short || data.display_name || (lat + ', ' + lng);
   } catch(e) {
     return lat + ', ' + lng;
   }
@@ -1810,23 +1839,7 @@ async function reverseGeocode(lat, lng) {
 async function getAddress(lat, lng) {
   const key = lat + ',' + lng;
   if (geoAddrCache[key]) return geoAddrCache[key];
-  const addr = await reverseGeocode(lat, lng);
-  // Simplifier l'adresse : garder numéro + rue + ville
-  try {
-    const res = await fetch(`https://nominatim.openstreetmap.org/reverse?lat=${lat}&lon=${lng}&format=json`, {
-      headers: { 'Accept-Language': 'fr' }
-    });
-    const data = await res.json();
-    const a = data.address || {};
-    const short = [
-      (a.house_number || ''),
-      (a.road || a.pedestrian || a.street || ''),
-      (a.city || a.town || a.village || a.municipality || '')
-    ].filter(Boolean).join(' ');
-    geoAddrCache[key] = short || data.display_name || key;
-  } catch(e) {
-    geoAddrCache[key] = key;
-  }
+  geoAddrCache[key] = await reverseGeocode(lat, lng);
   return geoAddrCache[key];
 }
 
