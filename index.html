@@ -2299,17 +2299,15 @@ document.getElementById('add-pointage-save').addEventListener('click', async () 
 
   if (dur <= 0) { errEl.textContent = 'Heure de depart invalide - doit etre apres l\'arrivee.'; return; }
 
-  const roundedStart = roundToQuarter(startDate);
-  const roundedEnd = roundToQuarter(endDate);
-  const roundedDur = (roundedEnd - roundedStart) / 3600000;
+  const dur2 = (endDate - startDate) / 3600000;
 
   try {
     await db.collection('pointages').add({
       userId: uid,
       userName: empName,
-      startTime: roundedStart.toISOString(),
-      endTime: roundedEnd.toISOString(),
-      duration: roundedDur,
+      startTime: startDate.toISOString(),
+      endTime: endDate.toISOString(),
+      duration: dur2,
       date: dateV,
       team: empTeam,
       geo: null,
