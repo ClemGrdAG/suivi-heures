@@ -1,10 +1,7 @@
-const CACHE_NAME = 'suivi-heures-v2';
+const CACHE_NAME = 'suivi-heures-v3';
 const ASSETS = [
   '/suivi-heures/',
-  '/suivi-heures/index.html',
-  'https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js',
-  'https://www.gstatic.com/firebasejs/9.23.0/firebase-auth-compat.js',
-  'https://www.gstatic.com/firebasejs/9.23.0/firebase-firestore-compat.js'
+  '/suivi-heures/index.html'
 ];
 
 self.addEventListener('install', e => {
@@ -24,12 +21,16 @@ self.addEventListener('activate', e => {
 });
 
 self.addEventListener('fetch', e => {
+  // Ne pas intercepter les appels vers des APIs externes
+  const url = e.request.url;
+  if (!url.startsWith(self.location.origin)) return;
   if (e.request.method !== 'GET') return;
+
   e.respondWith(
     fetch(e.request)
       .then(res => {
         const clone = res.clone();
-        caches.open(CACHE_NAME).then(cache => cache.put(e.request, clone));
+        caches.open(CACHE_NAME).then(cache => cache.put(e.request, clone)).catch(() => {});
         return res;
       })
       .catch(() => caches.match(e.request))

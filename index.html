@@ -1824,26 +1824,23 @@ document.getElementById('modal-confirm-delete').addEventListener('click', async 
 // =============================================
 // Géocodage inverse via OpenStreetMap
 async function reverseGeocode(lat, lng) {
-  // Essayer plusieurs proxies CORS
-  const proxies = [
-    'https://api.allorigins.win/raw?url=',
-    'https://corsproxy.io/?'
-  ];
-  const nominatimUrl = 'https://nominatim.openstreetmap.org/reverse?lat=' + lat + '&lon=' + lng + '&format=json&accept-language=fr';
-  for (const proxy of proxies) {
-    try {
-      const res = await fetch(proxy + encodeURIComponent(nominatimUrl));
-      const data = await res.json();
-      const a = data.address || {};
-      const short = [
-        (a.house_number || ''),
-        (a.road || a.pedestrian || a.street || ''),
-        (a.city || a.town || a.village || a.municipality || '')
-      ].filter(Boolean).join(' ');
-      if (short) return short;
-    } catch(e) { continue; }
+  try {
+    // Utiliser photon.komoot.io qui supporte CORS nativement
+    const res = await fetch(
+      'https://photon.komoot.io/reverse?lat=' + lat + '&lon=' + lng + '&lang=fr',
+      { mode: 'cors' }
+    );
+    const data = await res.json();
+    const props = data?.features?.[0]?.properties || {};
+    const short = [
+      (props.housenumber || ''),
+      (props.street || props.name || ''),
+      (props.city || props.town || props.village || '')
+    ].filter(Boolean).join(' ');
+    return short || (lat + ', ' + lng);
+  } catch(e) {
+    return lat + ', ' + lng;
   }
-  return lat + ', ' + lng;
 }
 
 async function getAddress(lat, lng) {
