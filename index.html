@@ -445,6 +445,24 @@ input:focus, select:focus { outline: none; border-color: var(--ag-gold); backgro
   </div>
 
 
+  <!-- Modal type de contrat -->
+  <div class="modal-overlay" id="modal-contrat" style="display:none">
+    <div class="modal">
+      <h3 id="modal-contrat-title">Type de contrat</h3>
+      <p style="font-size:13px;color:#666;margin-bottom:12px;">Sélectionnez le contrat applicable à ce salarié.</p>
+      <select id="contrat-select" style="margin-bottom:12px;">
+        <option value="c1">Contrat 1 — 35h sur 5 jours (7h/jour)</option>
+        <option value="c2">Contrat 2 — 35h lundi-vendredi midi</option>
+        <option value="c3">Contrat 3 — Alternance 4j/5j (Alexandre)</option>
+      </select>
+      <div class="error" id="contrat-err"></div>
+      <div class="modal-actions">
+        <button class="btn-secondary" onclick="closeModal()">Annuler</button>
+        <button class="btn-primary" id="contrat-save">Enregistrer</button>
+      </div>
+    </div>
+  </div>
+
   <!-- Modal solde initial -->
   <div class="modal-overlay" id="modal-solde" style="display:none">
     <div class="modal">
@@ -572,6 +590,7 @@ function closeModal() {
   document.getElementById('modal-solde').style.display = 'none';
   document.getElementById('modal-add-pointage').style.display = 'none';
   document.getElementById('modal-edit-email').style.display = 'none';
+  if (document.getElementById('modal-contrat')) document.getElementById('modal-contrat').style.display = 'none';
 }
 function toLocalDatetime(isoStr) {
   const d = new Date(isoStr);
@@ -1657,6 +1676,7 @@ function listenEmployees() {
           </div>
           <div class="admin-row-actions" style="flex-wrap:wrap;justify-content:flex-end;">
             <span style="font-size:11px;font-weight:600;padding:3px 8px;border-radius:10px;background:${soldeBg};color:${soldeColor};">${soldeStr}</span>
+            <button class="btn-sm btn-edit" onclick="openContratModal('${u.id}', '${u.name||''}', '${u.contrat||'c1'}')">Contrat</button>
             <button class="btn-sm btn-edit" onclick="openSoldeModal('${u.id}', '${u.name||''}', ${u.soldeInitial||0})">Solde</button>
             <button class="btn-sm btn-edit" onclick="openEditEmailModal('${u.id}', '${u.email||''}', '${u.name||''}')">Email</button>
             <button class="btn-sm btn-edit" onclick="sendResetPassword('${u.email||''}', '${u.name||''}')">MDP</button>
