@@ -287,10 +287,7 @@ input:focus, select:focus { outline: none; border-color: var(--ag-gold); backgro
       <div class="card">
         <div class="card-title">Mon profil</div>
         <input type="text" id="p-name" placeholder="Nom complet" />
-        <div class="radio-grp">
-          <label class="radio-lbl"><input type="radio" name="pteam" value="sedentaire" checked /> Sédentaire</label>
-          <label class="radio-lbl"><input type="radio" name="pteam" value="itinerant" /> Itinérant</label>
-        </div>
+        <div style="font-size:12px;color:#aaa;margin-bottom:10px;">Type d'équipe : <span id="p-team-display" style="font-weight:600;color:#555;"></span> <span style="font-size:11px;color:#bbb;">(modifiable par l'admin uniquement)</span></div>
         <button class="btn-secondary" id="p-save">Enregistrer le profil</button>
       </div>
       <div class="card">
@@ -445,6 +442,22 @@ input:focus, select:focus { outline: none; border-color: var(--ag-gold); backgro
   </div>
 
 
+  <!-- Modal type équipe -->
+  <div class="modal-overlay" id="modal-team" style="display:none">
+    <div class="modal">
+      <h3 id="modal-team-title">Type d'équipe</h3>
+      <div class="radio-grp" style="margin-bottom:12px;">
+        <label class="radio-lbl"><input type="radio" name="mteam" value="sedentaire" /> 🏢 Sédentaire</label>
+        <label class="radio-lbl"><input type="radio" name="mteam" value="itinerant" /> 🚗 Itinérant</label>
+      </div>
+      <div class="error" id="team-err"></div>
+      <div class="modal-actions">
+        <button class="btn-secondary" onclick="closeModal()">Annuler</button>
+        <button class="btn-primary" id="team-save">Enregistrer</button>
+      </div>
+    </div>
+  </div>
+
   <!-- Modal type de contrat -->
   <div class="modal-overlay" id="modal-contrat" style="display:none">
     <div class="modal">
@@ -591,6 +604,7 @@ function closeModal() {
   document.getElementById('modal-add-pointage').style.display = 'none';
   document.getElementById('modal-edit-email').style.display = 'none';
   if (document.getElementById('modal-contrat')) document.getElementById('modal-contrat').style.display = 'none';
+  if (document.getElementById('modal-team')) document.getElementById('modal-team').style.display = 'none';
 }
 function toLocalDatetime(isoStr) {
   const d = new Date(isoStr);
@@ -743,7 +757,8 @@ async function loadProfile() {
       UP = snap.data();
       document.getElementById('u-name').textContent = UP.name || CU.email;
       document.getElementById('p-name').value = UP.name || '';
-      document.querySelectorAll('input[name="pteam"]').forEach(r => r.checked = r.value === (UP.team || 'sedentaire'));
+      const teamDisplay = document.getElementById('p-team-display');
+      if (teamDisplay) teamDisplay.textContent = (UP.team === 'itinerant') ? 'Itinérant' : 'Sédentaire';
       if (document.getElementById('p-contrat')) document.getElementById('p-contrat').value = UP.contrat || 'c1';
     }
   } catch(e) { console.error(e); }
@@ -1759,6 +1774,7 @@ function listenEmployees() {
           <div class="admin-row-actions" style="flex-wrap:wrap;justify-content:flex-end;">
             <span style="font-size:11px;font-weight:600;padding:3px 8px;border-radius:10px;background:${soldeBg};color:${soldeColor};">${soldeStr}</span>
             <button class="btn-sm btn-edit admin-contrat-btn" data-uid="${u.id}" data-name="${u.name||''}" data-contrat="${u.contrat||'c1'}">Contrat</button>
+            <button class="btn-sm btn-edit" onclick="openTeamModal('${u.id}', '${u.name||''}', '${u.team||'sedentaire'}')">${u.team==='itinerant'?'🚗 Itinérant':'🏢 Sédentaire'}</button>
             <button class="btn-sm btn-edit" onclick="openSoldeModal('${u.id}', '${u.name||''}', ${u.soldeInitial||0})">Solde</button>
             <button class="btn-sm btn-edit" onclick="openEditEmailModal('${u.id}', '${u.email||''}', '${u.name||''}')">Email</button>
             <button class="btn-sm btn-edit" onclick="sendResetPassword('${u.email||''}', '${u.name||''}')">MDP</button>
@@ -1790,6 +1806,30 @@ window.sendResetPassword = async (email, name) => {
 };
 
 // Modification email
+// =============================================
+// TYPE D'ÉQUIPE (admin)
+// =============================================
+let currentTeamUid = null;
+
+window.openTeamModal = (uid, name, currentTeam) => {
+  currentTeamUid = uid;
+  document.getElementById('modal-team-title').textContent = "Équipe de " + name;
+  document.querySelectorAll('input[name="mteam"]').forEach(r => r.checked = r.value === currentTeam);
+  document.getElementById('team-err').textContent = '';
+  document.getElementById('modal-team').style.display = 'flex';
+};
+
+document.getElementById('team-save').addEventListener('click', async () => {
+  const team = document.querySelector('input[name="mteam"]:checked')?.value;
+  if (!team) return;
+  try {
+    await db.collection('users').doc(currentTeamUid).update({ team });
+    closeModal();
+  } catch(e) {
+    document.getElementById('team-err').textContent = 'Erreur : ' + e.message;
+  }
+});
+
 // =============================================
 // TYPE DE CONTRAT (admin)
 // =============================================
