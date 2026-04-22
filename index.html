@@ -1941,23 +1941,43 @@ document.getElementById('modal-confirm-delete').addEventListener('click', async 
 // =============================================
 // Géocodage inverse via OpenStreetMap
 async function reverseGeocode(lat, lng) {
-  try {
-    const res = await fetch(
-      'https://photon.komoot.io/reverse?lat=' + lat + '&lon=' + lng + '&lang=fr',
-      { mode: 'cors' }
-    );
-    const data = await res.json();
-    const props = data?.features?.[0]?.properties || {};
-    const parts = [
-      props.housenumber || '',
-      props.street || props.name || '',
-      props.postcode || '',
-      props.city || props.town || props.village || ''
-    ].filter(Boolean);
-    return parts.length >= 2 ? parts.join(' ') : (lat + ', ' + lng);
-  } catch(e) {
-    return lat + ', ' + lng;
+  // API officielle française - supporte CORS nativement depuis les navigateurs
+  const apis = [
+    async () => {
+      const res = await fetch(
+        'https://api-adresse.data.gouv.fr/reverse/?lon=' + lng + '&lat=' + lat
+      );
+      const data = await res.json();
+      const label = data?.features?.[0]?.properties?.label;
+      if (label) return label;
+      throw new Error('no result');
+    },
+    async () => {
+      const res = await fetch(
+        'https://photon.komoot.io/reverse?lat=' + lat + '&lon=' + lng + '&lang=fr'
+      );
+      const data = await res.json();
+      const props = data?.features?.[0]?.properties || {};
+      const parts = [props.housenumber, props.street || props.name, props.postcode, props.city || props.town || props.village].filter(Boolean);
+      if (parts.length >= 2) return parts.join(' ');
+      throw new Error('no result');
+    },
+    async () => {
+      const res = await fetch(
+        'https://nominatim.openstreetmap.org/reverse?lat=' + lat + '&lon=' + lng + '&format=json&accept-language=fr',
+        { headers: { 'User-Agent': 'AG-Groupe-Badgeuse/1.0' } }
+      );
+      const data = await res.json();
+      const a = data.address || {};
+      const parts = [a.house_number, a.road, a.postcode, a.city || a.town || a.village].filter(Boolean);
+      if (parts.length >= 2) return parts.join(' ');
+      throw new Error('no result');
+    }
+  ];
+  for (const api of apis) {
+    try { return await api(); } catch(e) { continue; }
   }
+  return lat + ', ' + lng;
 }
 
 async function getAddress(lat, lng) {
