@@ -1589,13 +1589,16 @@ function renderAllPointages() {
     const isItin = e.team === 'itinerant';
     const gsKeyA = e.geoStart ? e.geoStart.lat + ',' + e.geoStart.lng : (e.geo ? e.geo.lat + ',' + e.geo.lng : null);
     const geKeyA = e.geoEnd ? e.geoEnd.lat + ',' + e.geoEnd.lng : null;
-    const addrStartA = gsKeyA ? (geoAddrCache[gsKeyA] || gsKeyA) : null;
-    const addrEndA = geKeyA ? (geoAddrCache[geKeyA] || geKeyA) : null;
+    // Récupérer depuis le cache ou afficher "Chargement..."
+    const addrStartA = gsKeyA ? (geoAddrCache[gsKeyA] || null) : null;
+    const addrEndA = geKeyA ? (geoAddrCache[geKeyA] || null) : null;
+    const startDisplay = addrStartA || (gsKeyA ? '<span class="geo-loading" data-lat="' + gsKeyA.split(',')[0] + '" data-lng="' + gsKeyA.split(',')[1] + '">⏳ Chargement...</span>' : '');
+    const endDisplay = addrEndA || (geKeyA ? '<span class="geo-loading" data-lat="' + geKeyA.split(',')[0] + '" data-lng="' + geKeyA.split(',')[1] + '">⏳ Chargement...</span>' : '');
     const locLine = isItin
-      ? (addrStartA || addrEndA
+      ? (gsKeyA || geKeyA
           ? '<div style="font-size:11px;color:#888;margin-top:2px;">' +
-            (addrStartA ? '📍 Arrivée : ' + addrStartA : '') +
-            (addrEndA ? '<br>📍 Départ : ' + addrEndA : '') +
+            (gsKeyA ? '📍 Arrivée : ' + startDisplay : '') +
+            (geKeyA ? '<br>📍 Départ : ' + endDisplay : '') +
             '</div>'
           : '<div style="font-size:11px;color:#bbb;margin-top:2px;">📍 Position non enregistrée</div>')
       : '<div style="font-size:11px;color:#bbb;margin-top:2px;">🏢 Bureau</div>';
@@ -1899,19 +1902,19 @@ document.getElementById('modal-confirm-delete').addEventListener('click', async 
 // Géocodage inverse via OpenStreetMap
 async function reverseGeocode(lat, lng) {
   try {
-    // Utiliser photon.komoot.io qui supporte CORS nativement
     const res = await fetch(
       'https://photon.komoot.io/reverse?lat=' + lat + '&lon=' + lng + '&lang=fr',
       { mode: 'cors' }
     );
     const data = await res.json();
     const props = data?.features?.[0]?.properties || {};
-    const short = [
-      (props.housenumber || ''),
-      (props.street || props.name || ''),
-      (props.city || props.town || props.village || '')
-    ].filter(Boolean).join(' ');
-    return short || (lat + ', ' + lng);
+    const parts = [
+      props.housenumber || '',
+      props.street || props.name || '',
+      props.postcode || '',
+      props.city || props.town || props.village || ''
+    ].filter(Boolean);
+    return parts.length >= 2 ? parts.join(' ') : (lat + ', ' + lng);
   } catch(e) {
     return lat + ', ' + lng;
   }
@@ -2619,6 +2622,10 @@ document.getElementById('export-agreno').addEventListener('click', async () => {
     const pointages = snap.docs
       .map(d => d.data())
       .filter(e => e.endTime <= endDate.toISOString());
+
+    // Précharger les adresses des itinérants
+    const itinPtg = pointages.filter(e => e.team === 'itinerant');
+    if (itinPtg.length) await preloadGeoAddresses(itinPtg);
 
     // Récupérer les congés validés du mois
     const congesSnap = await db.collection('conges')
