@@ -1573,11 +1573,14 @@ function listenAllPointages() {
   try {
     unsubAllPointages = db.collection('pointages').orderBy('endTime','desc').onSnapshot(snap => {
       allPointagesData = snap.docs.map(d => ({ id: d.id, ...d.data() }));
-      // Précharger les adresses des itinérants
-      const itinData = allPointagesData.filter(e => e.team === 'itinerant');
-      if (itinData.length) preloadGeoAddresses(itinData);
-      renderAllPointages();
       updateAdminStats();
+      // Précharger les adresses puis afficher
+      const itinData = allPointagesData.filter(e => e.team === 'itinerant');
+      if (itinData.length) {
+        preloadGeoAddresses(itinData).then(() => renderAllPointages());
+      } else {
+        renderAllPointages();
+      }
     });
   } catch(e) { console.error(e); }
 }
@@ -1605,15 +1608,13 @@ function renderAllPointages() {
     const gsKeyA = e.geoStart ? e.geoStart.lat + ',' + e.geoStart.lng : (e.geo ? e.geo.lat + ',' + e.geo.lng : null);
     const geKeyA = e.geoEnd ? e.geoEnd.lat + ',' + e.geoEnd.lng : null;
     // Récupérer depuis le cache ou afficher "Chargement..."
-    const addrStartA = gsKeyA ? (geoAddrCache[gsKeyA] || null) : null;
-    const addrEndA = geKeyA ? (geoAddrCache[geKeyA] || null) : null;
-    const startDisplay = addrStartA || (gsKeyA ? '<span class="geo-loading" data-lat="' + gsKeyA.split(',')[0] + '" data-lng="' + gsKeyA.split(',')[1] + '">⏳ Chargement...</span>' : '');
-    const endDisplay = addrEndA || (geKeyA ? '<span class="geo-loading" data-lat="' + geKeyA.split(',')[0] + '" data-lng="' + geKeyA.split(',')[1] + '">⏳ Chargement...</span>' : '');
+    const addrStartA = gsKeyA ? (geoAddrCache[gsKeyA] || gsKeyA) : null;
+    const addrEndA = geKeyA ? (geoAddrCache[geKeyA] || geKeyA) : null;
     const locLine = isItin
       ? (gsKeyA || geKeyA
           ? '<div style="font-size:11px;color:#888;margin-top:2px;">' +
-            (gsKeyA ? '📍 Arrivée : ' + startDisplay : '') +
-            (geKeyA ? '<br>📍 Départ : ' + endDisplay : '') +
+            (gsKeyA ? '📍 Arrivée : ' + addrStartA : '') +
+            (geKeyA ? '<br>📍 Départ : ' + addrEndA : '') +
             '</div>'
           : '<div style="font-size:11px;color:#bbb;margin-top:2px;">📍 Position non enregistrée</div>')
       : '<div style="font-size:11px;color:#bbb;margin-top:2px;">🏢 Bureau</div>';
@@ -1994,12 +1995,19 @@ async function preloadGeoAddresses(entries) {
     if (e.geoEnd) keys.add(e.geoEnd.lat + '|' + e.geoEnd.lng);
     if (e.geo && !e.geoStart) keys.add(e.geo.lat + '|' + e.geo.lng);
   });
-  for (const key of keys) {
-    const [lat, lng] = key.split('|');
-    if (!geoAddrCache[lat + ',' + lng]) {
+  // Charger toutes les adresses manquantes en parallèle (max 3 à la fois)
+  const missing = [...keys].filter(k => {
+    const [lat, lng] = k.split('|');
+    return !geoAddrCache[lat + ',' + lng];
+  });
+  // Traiter par lots de 3
+  for (let i = 0; i < missing.length; i += 3) {
+    const batch = missing.slice(i, i + 3);
+    await Promise.all(batch.map(async k => {
+      const [lat, lng] = k.split('|');
       await getAddress(lat, lng);
-      await new Promise(r => setTimeout(r, 200)); // respecter limites OSM
-    }
+    }));
+    if (i + 3 < missing.length) await new Promise(r => setTimeout(r, 300));
   }
 }
 
