@@ -1052,8 +1052,8 @@ function buildHistoryHTML(entries, el) {
       entries.forEach(e => {
         const d = new Date(e.endTime);
         const wd2 = d.getDay() || 7;
-        const m2 = new Date(d); m2.setDate(d.getDate() - wd2 + 1); m2.setHours(0,0,0,0);
-        const wk = m2.toISOString().split('T')[0];
+        const m2 = new Date(d); m2.setDate(d.getDate() - wd2 + 1); m2.setHours(12,0,0,0);
+        const wk = m2.getFullYear()+'-'+String(m2.getMonth()+1).padStart(2,'0')+'-'+String(m2.getDate()).padStart(2,'0');
         if (!weekCumul[wk]) weekCumul[wk] = { total: 0, mon: m2 };
         weekCumul[wk].total += e.duration;
       });
@@ -1067,7 +1067,8 @@ function buildHistoryHTML(entries, el) {
           const d = new Date(e.endTime);
           const wd2 = d.getDay() || 7;
           const m2 = new Date(d); m2.setDate(d.getDate() - wd2 + 1); m2.setHours(0,0,0,0);
-          return m2.toISOString().split('T')[0] === wk;
+          m2.setHours(12,0,0,0);
+          return (m2.getFullYear()+'-'+String(m2.getMonth()+1).padStart(2,'0')+'-'+String(m2.getDate()).padStart(2,'0')) === wk;
         }).sort((a,b) => new Date(b.endTime) - new Date(a.endTime));
 
         const wkMon = weekCumul[wk].mon;
@@ -1075,7 +1076,7 @@ function buildHistoryHTML(entries, el) {
         const wkTotal = weekCumul[wk].total;
         const wkColor = wkTotal >= 35 ? '#1D9E75' : '#E24B4A';
         const wkPct = Math.min(Math.round((wkTotal / 35) * 100), 100);
-        const isCurrentWeek = wk >= monDate.toISOString().split('T')[0];
+        const isCurrentWeek = wk >= (monDate.getFullYear()+'-'+String(monDate.getMonth()+1).padStart(2,'0')+'-'+String(monDate.getDate()).padStart(2,'0'));
 
         // En-tête de semaine
         html += '<div style="background:#f7f7fb;border-radius:10px;padding:10px 12px;margin-bottom:6px;margin-top:8px;">' +
@@ -1300,7 +1301,7 @@ async function renderStats() {
 // Calcule les jours fériés français pour une année donnée
 function getFeriesForYear(year) {
   const feries = new Set();
-  const fmt = d => d.toISOString().split('T')[0];
+  const fmt = d => d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0');
 
   // Fériés fixes
   feries.add(year + '-01-01'); // Jour de l'an
@@ -1363,7 +1364,8 @@ function getFeriesDaysInWeek(weekKey) {
   for (let i = 0; i < 5; i++) {
     const d = new Date(mon);
     d.setDate(mon.getDate() + i);
-    if (isFerie(d.toISOString().split('T')[0])) count++;
+    d.setHours(12,0,0,0);
+    if (isFerie(d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0'))) count++;
   }
   return count;
 }
@@ -1440,15 +1442,15 @@ async function renderWeeklyRecap() {
       const wd = d.getDay() || 7;
       const mon = new Date(d);
       mon.setDate(d.getDate() - wd + 1);
-      mon.setHours(0,0,0,0);
+      mon.setHours(12,0,0,0);
       if (mon < START_DATE) return; // ignorer les semaines avant le 13 avril
-      const key = mon.toISOString().split('T')[0];
+      const key = mon.getFullYear()+'-'+String(mon.getMonth()+1).padStart(2,'0')+'-'+String(mon.getDate()).padStart(2,'0');
       if (!weeks[key]) weeks[key] = { mon, total: 0, days: new Set() };
       weeks[key].total += e.duration;
       weeks[key].days.add(e.date);
     });
 
-    const thisWeekKey = thisMon.toISOString().split('T')[0];
+    const thisWeekKey = thisMon.getFullYear()+'-'+String(thisMon.getMonth()+1).padStart(2,'0')+'-'+String(thisMon.getDate()).padStart(2,'0');
     const sorted = Object.entries(weeks).sort((a,b) => b[0].localeCompare(a[0]));
 
     // Récupérer le solde initial depuis Firebase
@@ -1481,7 +1483,8 @@ async function renderWeeklyRecap() {
             const mon = new Date(cur);
             mon.setDate(cur.getDate() - wdNum + 1);
             mon.setHours(0,0,0,0);
-            const wk = mon.toISOString().split('T')[0];
+            mon.setHours(12,0,0,0);
+            const wk = mon.getFullYear()+'-'+String(mon.getMonth()+1).padStart(2,'0')+'-'+String(mon.getDate()).padStart(2,'0');
             if (!cpDaysByWeek[wk]) cpDaysByWeek[wk] = 0;
             // Demi-journée = 0.5 jour
             cpDaysByWeek[wk] += (c.duree === 'half_am' || c.duree === 'half_pm') ? 0.5 : 1;
@@ -1555,7 +1558,7 @@ async function renderWeeklyRecap() {
         '<div style="height:6px; background:#f0f0f0; border-radius:3px; overflow:hidden;">' +
         '<div style="height:100%; width:' + pct + '%; background:' + color + '; border-radius:3px;"></div>' +
         '</div>' +
-        '<div style="font-size:11px; color:#aaa; margin-top:4px;">' + w.days.size + ' jour' + (w.days.size > 1 ? 's' : '') + ' travaillé' + (w.days.size > 1 ? 's' : '') + (cpDays > 0 ? ' · ' + cpDays + ' j. CP · objectif ' + formatDuration(objectifSem) : ' · objectif 35h') + '</div>' +
+        '<div style="font-size:11px; color:#aaa; margin-top:4px;">' + w.days.size + ' jour' + (w.days.size > 1 ? 's' : '') + ' travaillé' + (w.days.size > 1 ? 's' : '') + ' · objectif ' + formatDuration(objectifSem) + (cpDays > 0 ? ' (' + cpDays + ' j. CP)' : '') + (getFeriesDaysInWeek(key) > 0 ? ' (' + getFeriesDaysInWeek(key) + ' j. férié)' : '') + '</div>' +
         '</div>';
     }).join('');
 
@@ -1665,8 +1668,8 @@ async function computeAllSoldes() {
   const day = now.getDay() || 7;
   const thisMon = new Date(now);
   thisMon.setDate(now.getDate() - day + 1);
-  thisMon.setHours(0,0,0,0);
-  const thisWeekKey = thisMon.toISOString().split('T')[0];
+  thisMon.setHours(12,0,0,0);
+  const thisWeekKey = thisMon.getFullYear()+'-'+String(thisMon.getMonth()+1).padStart(2,'0')+'-'+String(thisMon.getDate()).padStart(2,'0');
   const START_DATE = new Date('2025-04-13T00:00:00');
 
   try {
@@ -1683,9 +1686,9 @@ async function computeAllSoldes() {
       const wd = dt.getDay() || 7;
       const mon = new Date(dt);
       mon.setDate(dt.getDate() - wd + 1);
-      mon.setHours(0,0,0,0);
+      mon.setHours(12,0,0,0);
       if (mon < START_DATE) return;
-      const key = mon.toISOString().split('T')[0];
+      const key = mon.getFullYear()+'-'+String(mon.getMonth()+1).padStart(2,'0')+'-'+String(mon.getDate()).padStart(2,'0');
       if (key === thisWeekKey) return;
       if (!byUser[e.userId][key]) byUser[e.userId][key] = 0;
       byUser[e.userId][key] += e.duration;
@@ -2017,7 +2020,8 @@ function getMondayKey(dateStr) {
   const day = d.getDay() || 7;
   const mon = new Date(d);
   mon.setDate(d.getDate() - day + 1);
-  return mon.toISOString().split('T')[0];
+  mon.setHours(12,0,0,0);
+  return mon.getFullYear()+'-'+String(mon.getMonth()+1).padStart(2,'0')+'-'+String(mon.getDate()).padStart(2,'0');
 }
 
 document.getElementById('export-csv').addEventListener('click', async () => {
@@ -2552,9 +2556,10 @@ document.getElementById('btn-export-excel').addEventListener('click', async () =
       const d = new Date(e.endTime);
       const wd = d.getDay() || 7;
       const mon = new Date(d); mon.setDate(d.getDate()-wd+1); mon.setHours(0,0,0,0);
-      const wk = mon.toISOString().split('T')[0];
+      mon.setHours(12,0,0,0);
+      const wk = mon.getFullYear()+'-'+String(mon.getMonth()+1).padStart(2,'0')+'-'+String(mon.getDate()).padStart(2,'0');
       if (!weeks[wk]) weeks[wk] = { mon, days: {}, total: 0 };
-      const day = d.toISOString().split('T')[0];
+      const day = d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0');
       if (!weeks[wk].days[day]) weeks[wk].days[day] = { entries: [], total: 0 };
       weeks[wk].days[day].entries.push(e);
       weeks[wk].days[day].total += e.duration;
