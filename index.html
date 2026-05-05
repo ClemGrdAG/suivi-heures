@@ -1708,9 +1708,9 @@ async function computeAllSoldes() {
       const wd = dt.getDay() || 7;
       const mon = new Date(dt);
       mon.setDate(dt.getDate() - wd + 1);
-      mon.setHours(0,0,0,0);
+      mon.setHours(12,0,0,0); // midi pour éviter le bug timezone UTC
       if (mon < START_DATE) return;
-      const key = mon.toISOString().split('T')[0];
+      const key = mon.getFullYear() + '-' + String(mon.getMonth()+1).padStart(2,'0') + '-' + String(mon.getDate()).padStart(2,'0');
       if (key === thisWeekKey) return;
       if (!byUser[e.userId][key]) byUser[e.userId][key] = 0;
       byUser[e.userId][key] += e.duration;
@@ -2575,8 +2575,8 @@ document.getElementById('btn-export-excel').addEventListener('click', async () =
     entries.forEach(e => {
       const d = new Date(e.endTime);
       const wd = d.getDay() || 7;
-      const mon = new Date(d); mon.setDate(d.getDate()-wd+1); mon.setHours(0,0,0,0);
-      const wk = mon.toISOString().split('T')[0];
+      const mon = new Date(d); mon.setDate(d.getDate()-wd+1); mon.setHours(12,0,0,0);
+      const wk = mon.getFullYear() + '-' + String(mon.getMonth()+1).padStart(2,'0') + '-' + String(mon.getDate()).padStart(2,'0');
       if (!weeks[wk]) weeks[wk] = { mon, days: {}, total: 0 };
       const day = d.toISOString().split('T')[0];
       if (!weeks[wk].days[day]) weeks[wk].days[day] = { entries: [], total: 0 };
