@@ -1474,15 +1474,15 @@ async function renderWeeklyRecap() {
       const wd = d.getDay() || 7;
       const mon = new Date(d);
       mon.setDate(d.getDate() - wd + 1);
-      mon.setHours(0,0,0,0);
+      mon.setHours(12,0,0,0);
       if (mon < START_DATE) return; // ignorer les semaines avant le 13 avril
-      const key = mon.toISOString().split('T')[0];
+      const key = mon.getFullYear()+'-'+String(mon.getMonth()+1).padStart(2,'0')+'-'+String(mon.getDate()).padStart(2,'0');
       if (!weeks[key]) weeks[key] = { mon, total: 0, days: new Set() };
       weeks[key].total += e.duration;
       weeks[key].days.add(e.date);
     });
 
-    const thisWeekKey = thisMon.toISOString().split('T')[0];
+    const thisWeekKey = thisMon.getFullYear()+'-'+String(thisMon.getMonth()+1).padStart(2,'0')+'-'+String(thisMon.getDate()).padStart(2,'0');
     const sorted = Object.entries(weeks).sort((a,b) => b[0].localeCompare(a[0]));
 
     // Récupérer le solde initial depuis Firebase
@@ -1589,7 +1589,7 @@ async function renderWeeklyRecap() {
         '<div style="height:6px; background:#f0f0f0; border-radius:3px; overflow:hidden;">' +
         '<div style="height:100%; width:' + pct + '%; background:' + color + '; border-radius:3px;"></div>' +
         '</div>' +
-        '<div style="font-size:11px; color:#aaa; margin-top:4px;">' + w.days.size + ' jour' + (w.days.size > 1 ? 's' : '') + ' travaillé' + (w.days.size > 1 ? 's' : '') + (cpDays > 0 ? ' · ' + cpDays + ' j. CP · objectif ' + formatDuration(objectifSem) : ' · objectif 35h') + '</div>' +
+        '<div style="font-size:11px; color:#aaa; margin-top:4px;">' + w.days.size + ' jour' + (w.days.size > 1 ? 's' : '') + ' travaillé' + (w.days.size > 1 ? 's' : '') + ' · objectif ' + formatDuration(objectifSem) + (cpDays > 0 ? ' (' + cpDays + ' j. CP)' : '') + (getFeriesDaysInWeek(key) > 0 ? ' (' + getFeriesDaysInWeek(key) + ' j. férié)' : '') + '</div>' +
         '</div>';
     }).join('');
 
