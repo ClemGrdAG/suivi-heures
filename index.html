@@ -1074,8 +1074,9 @@ function buildHistoryHTML(entries, el) {
         const wkMon = weekCumul[wk].mon;
         const wkFri = new Date(wkMon); wkFri.setDate(wkMon.getDate() + 4);
         const wkTotal = weekCumul[wk].total;
-        const wkColor = wkTotal >= 35 ? '#1D9E75' : '#E24B4A';
-        const wkPct = Math.min(Math.round((wkTotal / 35) * 100), 100);
+        const wkObjectif = getWeeklyObjectif(UP?.contrat || 'c1', wk, {});
+        const wkColor = wkTotal >= wkObjectif ? '#1D9E75' : '#E24B4A';
+        const wkPct = Math.min(Math.round((wkTotal / (wkObjectif || 35)) * 100), 100);
         const isCurrentWeek = wk >= (monDate.getFullYear()+'-'+String(monDate.getMonth()+1).padStart(2,'0')+'-'+String(monDate.getDate()).padStart(2,'0'));
 
         // En-tête de semaine
@@ -1086,7 +1087,7 @@ function buildHistoryHTML(entries, el) {
           wkFri.toLocaleDateString('fr-FR',{day:'2-digit',month:'2-digit'}) +
           (isCurrentWeek ? ' <span style="font-size:10px;background:#EEEDFE;color:#534AB7;padding:1px 6px;border-radius:6px;margin-left:4px;">En cours</span>' : '') +
           '</span>' +
-          '<span style="font-size:13px;font-weight:700;color:' + wkColor + ';">Cumul : ' + formatDuration(wkTotal) + '</span>' +
+          '<span style="font-size:13px;font-weight:700;color:' + wkColor + ';">Cumul : ' + formatDuration(wkTotal) + ' / ' + formatDuration(wkObjectif) + '</span>' +
           '</div>' +
           '<div style="height:4px;background:#e0e0e0;border-radius:2px;overflow:hidden;">' +
           '<div style="height:100%;width:' + wkPct + '%;background:' + wkColor + ';border-radius:2px;"></div>' +
