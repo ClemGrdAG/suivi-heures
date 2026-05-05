@@ -1356,7 +1356,33 @@ function isFerie(dateStr) {
   return getFeries(year).has(dateStr);
 }
 
-// Compte les jours fériés ouvrés dans une semaine
+// Retourne les heures dues par jour selon contrat et numéro de semaine
+// weekday: 0=lun, 1=mar, 2=mer, 3=jeu, 4=ven
+function getHeuresParJour(contrat, weekday, weekNum) {
+  if (contrat === 'c1') return 7;
+  if (contrat === 'c2') return weekday === 4 ? 3.5 : 7; // vendredi = 3h30
+  if (contrat === 'c3') {
+    const joursParSemaine = weekNum % 2 !== 0 ? 4 : 5;
+    if (joursParSemaine === 4 && weekday === 4) return 0; // vendredi off semaine impaire
+    return joursParSemaine === 4 ? 35 / 4 : 7;
+  }
+  return 7;
+}
+
+// Calcule la réduction d'objectif due aux fériés pour une semaine
+// Toujours 7h par jour férié quel que soit le contrat
+function getFeriesReductionInWeek(contrat, weekKey) {
+  const mon = new Date(weekKey);
+  let reduction = 0;
+  for (let i = 0; i < 5; i++) {
+    const d = new Date(mon);
+    d.setDate(mon.getDate() + i);
+    if (isFerie(d.toISOString().split('T')[0])) reduction += 7;
+  }
+  return reduction;
+}
+
+// Compte les jours fériés ouvrés dans une semaine (pour affichage)
 function getFeriesDaysInWeek(weekKey) {
   const mon = new Date(weekKey);
   let count = 0;
@@ -1372,28 +1398,27 @@ function getFeriesDaysInWeek(weekKey) {
 function getWeeklyObjectif(contrat, weekKey, cpDaysByWeek) {
   const cpDays = cpDaysByWeek[weekKey] || 0;
 
-  // Déterminer l'objectif de base selon le contrat
-  let objectifBase = 35; // Contrat 1 par défaut
-  let joursTravailles = 5;
-
-  if (contrat === 'c2') {
-    // 35h lundi-jeudi + vendredi matin (3h30)
-    // = 7.875h/jour x4 + 3.5h = 35h
-    objectifBase = 35;
-    joursTravailles = 4.5;
-  } else if (contrat === 'c3') {
-    // Semaines impaires = 4 jours (8h45/jour), paires = 5 jours (7h/jour)
+  // Objectif de base selon le contrat
+  let objectifBase = 35;
+  if (contrat === 'c3') {
     const weekNum = getWeekNumber(new Date(weekKey));
-    objectifBase = 35;
-    joursTravailles = weekNum % 2 !== 0 ? 4 : 5;
+    objectifBase = 35; // toujours 35h quelle que soit la répartition
   }
 
-  // Réduire l'objectif proportionnellement aux jours de CP + jours fériés
-  const hParJour = objectifBase / joursTravailles;
-  const feriesDays = getFeriesDaysInWeek(weekKey);
-  const totalAbsences = Math.min(cpDays + feriesDays, joursTravailles);
-  const reduction = totalAbsences * hParJour;
-  return Math.max(0, objectifBase - reduction);
+  // Réduction pour jours fériés — calculée par jour exact selon contrat
+  const feriesReduction = getFeriesReductionInWeek(contrat, weekKey);
+
+  // Réduction pour CP — proportionnelle selon contrat
+  let cpReduction = 0;
+  if (cpDays > 0) {
+    const mon = new Date(weekKey);
+    const weekNum = getWeekNumber(mon);
+    // hParJourMoyen selon contrat
+    const hParJourMoyen = contrat === 'c2' ? 35 / 4.5 : contrat === 'c3' ? 35 / (weekNum % 2 !== 0 ? 4 : 5) : 7;
+    cpReduction = Math.min(cpDays, contrat === 'c2' ? 4.5 : contrat === 'c3' ? (getWeekNumber(mon) % 2 !== 0 ? 4 : 5) : 5) * hParJourMoyen;
+  }
+
+  return Math.max(0, objectifBase - feriesReduction - cpReduction);
 }
 
 function getWeekNumber(date) {
