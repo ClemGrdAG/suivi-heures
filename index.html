@@ -1073,8 +1073,9 @@ function buildHistoryHTML(entries, el) {
         const wkMon = weekCumul[wk].mon;
         const wkFri = new Date(wkMon); wkFri.setDate(wkMon.getDate() + 4);
         const wkTotal = weekCumul[wk].total;
-        const wkColor = wkTotal >= 35 ? '#1D9E75' : '#E24B4A';
-        const wkPct = Math.min(Math.round((wkTotal / 35) * 100), 100);
+        const wkObjectif = getWeeklyObjectif(UP?.contrat || 'c1', wk, {});
+        const wkColor = wkTotal >= wkObjectif ? '#1D9E75' : '#E24B4A';
+        const wkPct = Math.min(Math.round((wkTotal / (wkObjectif || 35)) * 100), 100);
         const isCurrentWeek = wk >= monDate.toISOString().split('T')[0];
 
         // En-tête de semaine
