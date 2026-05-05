@@ -1053,8 +1053,7 @@ function buildHistoryHTML(entries, el) {
         const d = new Date(e.endTime);
         const wd2 = d.getDay() || 7;
         const m2 = new Date(d); m2.setDate(d.getDate() - wd2 + 1); m2.setHours(0,0,0,0);
-        m2.setHours(12,0,0,0);
-        const wk = m2.getFullYear()+'-'+String(m2.getMonth()+1).padStart(2,'0')+'-'+String(m2.getDate()).padStart(2,'0');
+        const wk = m2.toISOString().split('T')[0];
         if (!weekCumul[wk]) weekCumul[wk] = { total: 0, mon: m2 };
         weekCumul[wk].total += e.duration;
       });
@@ -1068,19 +1067,15 @@ function buildHistoryHTML(entries, el) {
           const d = new Date(e.endTime);
           const wd2 = d.getDay() || 7;
           const m2 = new Date(d); m2.setDate(d.getDate() - wd2 + 1); m2.setHours(0,0,0,0);
-          m2.setHours(12,0,0,0);
-          const m2key = m2.getFullYear()+'-'+String(m2.getMonth()+1).padStart(2,'0')+'-'+String(m2.getDate()).padStart(2,'0');
-          return m2key === wk;
+          return m2.toISOString().split('T')[0] === wk;
         }).sort((a,b) => new Date(b.endTime) - new Date(a.endTime));
 
         const wkMon = weekCumul[wk].mon;
         const wkFri = new Date(wkMon); wkFri.setDate(wkMon.getDate() + 4);
         const wkTotal = weekCumul[wk].total;
-        const wkObjectif = getWeeklyObjectif(UP?.contrat || 'c1', wk, {});
-        const wkColor = wkTotal >= wkObjectif ? '#1D9E75' : '#E24B4A';
-        const wkPct = Math.min(Math.round((wkTotal / (wkObjectif || 35)) * 100), 100);
-        const monDateKey = monDate.getFullYear()+'-'+String(monDate.getMonth()+1).padStart(2,'0')+'-'+String(monDate.getDate()).padStart(2,'0');
-        const isCurrentWeek = wk >= monDateKey;
+        const wkColor = wkTotal >= 35 ? '#1D9E75' : '#E24B4A';
+        const wkPct = Math.min(Math.round((wkTotal / 35) * 100), 100);
+        const isCurrentWeek = wk >= monDate.toISOString().split('T')[0];
 
         // En-tête de semaine
         html += '<div style="background:#f7f7fb;border-radius:10px;padding:10px 12px;margin-bottom:6px;margin-top:8px;">' +
@@ -1090,7 +1085,7 @@ function buildHistoryHTML(entries, el) {
           wkFri.toLocaleDateString('fr-FR',{day:'2-digit',month:'2-digit'}) +
           (isCurrentWeek ? ' <span style="font-size:10px;background:#EEEDFE;color:#534AB7;padding:1px 6px;border-radius:6px;margin-left:4px;">En cours</span>' : '') +
           '</span>' +
-          '<span style="font-size:13px;font-weight:700;color:' + wkColor + ';">Cumul : ' + formatDuration(wkTotal) + ' / ' + formatDuration(wkObjectif) + '</span>' +
+          '<span style="font-size:13px;font-weight:700;color:' + wkColor + ';">Cumul : ' + formatDuration(wkTotal) + '</span>' +
           '</div>' +
           '<div style="height:4px;background:#e0e0e0;border-radius:2px;overflow:hidden;">' +
           '<div style="height:100%;width:' + wkPct + '%;background:' + wkColor + ';border-radius:2px;"></div>' +
@@ -1305,7 +1300,7 @@ async function renderStats() {
 // Calcule les jours fériés français pour une année donnée
 function getFeriesForYear(year) {
   const feries = new Set();
-  const fmt = d => d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0');
+  const fmt = d => d.toISOString().split('T')[0];
 
   // Fériés fixes
   feries.add(year + '-01-01'); // Jour de l'an
@@ -1361,44 +1356,14 @@ function isFerie(dateStr) {
   return getFeries(year).has(dateStr);
 }
 
-// Retourne les heures dues par jour selon contrat et numéro de semaine
-// weekday: 0=lun, 1=mar, 2=mer, 3=jeu, 4=ven
-function getHeuresParJour(contrat, weekday, weekNum) {
-  if (contrat === 'c1') return 7;
-  if (contrat === 'c2') return weekday === 4 ? 3.5 : 7; // vendredi = 3h30
-  if (contrat === 'c3') {
-    const joursParSemaine = weekNum % 2 !== 0 ? 4 : 5;
-    if (joursParSemaine === 4 && weekday === 4) return 0; // vendredi off semaine impaire
-    return joursParSemaine === 4 ? 35 / 4 : 7;
-  }
-  return 7;
-}
-
-// Calcule la réduction d'objectif due aux fériés pour une semaine
-// Toujours 7h par jour férié quel que soit le contrat
-function getFeriesReductionInWeek(contrat, weekKey) {
-  const mon = new Date(weekKey);
-  let reduction = 0;
-  for (let i = 0; i < 5; i++) {
-    const d = new Date(mon);
-    d.setDate(mon.getDate() + i);
-    d.setHours(12,0,0,0);
-    const ds = d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0');
-    if (isFerie(ds)) reduction += 7;
-  }
-  return reduction;
-}
-
-// Compte les jours fériés ouvrés dans une semaine (pour affichage)
+// Compte les jours fériés ouvrés dans une semaine
 function getFeriesDaysInWeek(weekKey) {
   const mon = new Date(weekKey);
   let count = 0;
   for (let i = 0; i < 5; i++) {
     const d = new Date(mon);
     d.setDate(mon.getDate() + i);
-    d.setHours(12,0,0,0);
-    const ds = d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0');
-    if (isFerie(ds)) count++;
+    if (isFerie(d.toISOString().split('T')[0])) count++;
   }
   return count;
 }
@@ -1407,27 +1372,28 @@ function getFeriesDaysInWeek(weekKey) {
 function getWeeklyObjectif(contrat, weekKey, cpDaysByWeek) {
   const cpDays = cpDaysByWeek[weekKey] || 0;
 
-  // Objectif de base selon le contrat
-  let objectifBase = 35;
-  if (contrat === 'c3') {
+  // Déterminer l'objectif de base selon le contrat
+  let objectifBase = 35; // Contrat 1 par défaut
+  let joursTravailles = 5;
+
+  if (contrat === 'c2') {
+    // 35h lundi-jeudi + vendredi matin (3h30)
+    // = 7.875h/jour x4 + 3.5h = 35h
+    objectifBase = 35;
+    joursTravailles = 4.5;
+  } else if (contrat === 'c3') {
+    // Semaines impaires = 4 jours (8h45/jour), paires = 5 jours (7h/jour)
     const weekNum = getWeekNumber(new Date(weekKey));
-    objectifBase = 35; // toujours 35h quelle que soit la répartition
+    objectifBase = 35;
+    joursTravailles = weekNum % 2 !== 0 ? 4 : 5;
   }
 
-  // Réduction pour jours fériés — calculée par jour exact selon contrat
-  const feriesReduction = getFeriesReductionInWeek(contrat, weekKey);
-
-  // Réduction pour CP — proportionnelle selon contrat
-  let cpReduction = 0;
-  if (cpDays > 0) {
-    const mon = new Date(weekKey);
-    const weekNum = getWeekNumber(mon);
-    // hParJourMoyen selon contrat
-    const hParJourMoyen = contrat === 'c2' ? 35 / 4.5 : contrat === 'c3' ? 35 / (weekNum % 2 !== 0 ? 4 : 5) : 7;
-    cpReduction = Math.min(cpDays, contrat === 'c2' ? 4.5 : contrat === 'c3' ? (getWeekNumber(mon) % 2 !== 0 ? 4 : 5) : 5) * hParJourMoyen;
-  }
-
-  return Math.max(0, objectifBase - feriesReduction - cpReduction);
+  // Réduire l'objectif proportionnellement aux jours de CP + jours fériés
+  const hParJour = objectifBase / joursTravailles;
+  const feriesDays = getFeriesDaysInWeek(weekKey);
+  const totalAbsences = Math.min(cpDays + feriesDays, joursTravailles);
+  const reduction = totalAbsences * hParJour;
+  return Math.max(0, objectifBase - reduction);
 }
 
 function getWeekNumber(date) {
@@ -1474,15 +1440,15 @@ async function renderWeeklyRecap() {
       const wd = d.getDay() || 7;
       const mon = new Date(d);
       mon.setDate(d.getDate() - wd + 1);
-      mon.setHours(12,0,0,0);
+      mon.setHours(0,0,0,0);
       if (mon < START_DATE) return; // ignorer les semaines avant le 13 avril
-      const key = mon.getFullYear()+'-'+String(mon.getMonth()+1).padStart(2,'0')+'-'+String(mon.getDate()).padStart(2,'0');
+      const key = mon.toISOString().split('T')[0];
       if (!weeks[key]) weeks[key] = { mon, total: 0, days: new Set() };
       weeks[key].total += e.duration;
       weeks[key].days.add(e.date);
     });
 
-    const thisWeekKey = thisMon.getFullYear()+'-'+String(thisMon.getMonth()+1).padStart(2,'0')+'-'+String(thisMon.getDate()).padStart(2,'0');
+    const thisWeekKey = thisMon.toISOString().split('T')[0];
     const sorted = Object.entries(weeks).sort((a,b) => b[0].localeCompare(a[0]));
 
     // Récupérer le solde initial depuis Firebase
@@ -1525,7 +1491,7 @@ async function renderWeeklyRecap() {
       }
     });
 
-    // Calculer le solde — uniquement sur semaines avec pointages, objectif ajusté si férié
+    // Calculer le solde total — objectif ajusté par contrat et CP
     let soldeTotal = soldeInitial - recupDeduction;
     const userContrat = UP?.contrat || 'c1';
     Object.entries(weeks).forEach(([key, w]) => {
@@ -1589,7 +1555,7 @@ async function renderWeeklyRecap() {
         '<div style="height:6px; background:#f0f0f0; border-radius:3px; overflow:hidden;">' +
         '<div style="height:100%; width:' + pct + '%; background:' + color + '; border-radius:3px;"></div>' +
         '</div>' +
-        '<div style="font-size:11px; color:#aaa; margin-top:4px;">' + w.days.size + ' jour' + (w.days.size > 1 ? 's' : '') + ' travaillé' + (w.days.size > 1 ? 's' : '') + ' · objectif ' + formatDuration(objectifSem) + (cpDays > 0 ? ' (' + cpDays + ' j. CP)' : '') + (getFeriesDaysInWeek(key) > 0 ? ' (' + getFeriesDaysInWeek(key) + ' j. férié)' : '') + '</div>' +
+        '<div style="font-size:11px; color:#aaa; margin-top:4px;">' + w.days.size + ' jour' + (w.days.size > 1 ? 's' : '') + ' travaillé' + (w.days.size > 1 ? 's' : '') + (cpDays > 0 ? ' · ' + cpDays + ' j. CP · objectif ' + formatDuration(objectifSem) : ' · objectif 35h') + '</div>' +
         '</div>';
     }).join('');
 
@@ -1717,9 +1683,9 @@ async function computeAllSoldes() {
       const wd = dt.getDay() || 7;
       const mon = new Date(dt);
       mon.setDate(dt.getDate() - wd + 1);
-      mon.setHours(12,0,0,0); // midi pour éviter le bug timezone UTC
+      mon.setHours(0,0,0,0);
       if (mon < START_DATE) return;
-      const key = mon.getFullYear() + '-' + String(mon.getMonth()+1).padStart(2,'0') + '-' + String(mon.getDate()).padStart(2,'0');
+      const key = mon.toISOString().split('T')[0];
       if (key === thisWeekKey) return;
       if (!byUser[e.userId][key]) byUser[e.userId][key] = 0;
       byUser[e.userId][key] += e.duration;
@@ -1741,10 +1707,11 @@ async function computeAllSoldes() {
       const base = soldesInitiaux[uid] || 0;
       const contrat = userContracts[uid] || 'c1';
       const solde = Object.entries(weekData).reduce((a, [wk, h]) => {
-        const obj = getWeeklyObjectif(contrat, wk, {});
+        const obj = getWeeklyObjectif(contrat, wk, {}); // sans CP pour simplifier ici
         return a + (h - obj);
       }, 0);
       employeesSolde[uid] = base + solde;
+      // Les jours fériés sont gérés dans getWeeklyObjectif via getFeriesDaysInWeek
     });
 
     // Ajouter les users avec solde initial mais sans pointages
@@ -2584,8 +2551,8 @@ document.getElementById('btn-export-excel').addEventListener('click', async () =
     entries.forEach(e => {
       const d = new Date(e.endTime);
       const wd = d.getDay() || 7;
-      const mon = new Date(d); mon.setDate(d.getDate()-wd+1); mon.setHours(12,0,0,0);
-      const wk = mon.getFullYear() + '-' + String(mon.getMonth()+1).padStart(2,'0') + '-' + String(mon.getDate()).padStart(2,'0');
+      const mon = new Date(d); mon.setDate(d.getDate()-wd+1); mon.setHours(0,0,0,0);
+      const wk = mon.toISOString().split('T')[0];
       if (!weeks[wk]) weeks[wk] = { mon, days: {}, total: 0 };
       const day = d.toISOString().split('T')[0];
       if (!weeks[wk].days[day]) weeks[wk].days[day] = { entries: [], total: 0 };
