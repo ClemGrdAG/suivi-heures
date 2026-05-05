@@ -1516,25 +1516,14 @@ async function renderWeeklyRecap() {
       }
     });
 
-    // Générer toutes les semaines depuis START_DATE jusqu'à semaine courante exclue
-    const allWks = [];
-    const curWk = new Date(START_DATE);
-    const wd0 = curWk.getDay() || 7;
-    curWk.setDate(curWk.getDate() - wd0 + 1);
-    curWk.setHours(0,0,0,0);
-    const thisWkDate = new Date(thisWeekKey);
-    while (curWk < thisWkDate) {
-      allWks.push(curWk.toISOString().split('T')[0]);
-      curWk.setDate(curWk.getDate() + 7);
-    }
-
-    // Calculer le solde total — sur toutes les semaines (même sans pointage)
+    // Calculer le solde — uniquement sur semaines avec pointages, objectif ajusté si férié
     let soldeTotal = soldeInitial - recupDeduction;
     const userContrat = UP?.contrat || 'c1';
-    allWks.forEach(key => {
-      const h = weeks[key] ? weeks[key].total : 0;
-      const objectif = getWeeklyObjectif(userContrat, key, cpDaysByWeek);
-      soldeTotal += h - objectif;
+    Object.entries(weeks).forEach(([key, w]) => {
+      if (key !== thisWeekKey) {
+        const objectif = getWeeklyObjectif(userContrat, key, cpDaysByWeek);
+        soldeTotal += w.total - objectif;
+      }
     });
 
     // Afficher le compteur de solde
@@ -1739,35 +1728,14 @@ async function computeAllSoldes() {
     const userContracts = {};
     usersSnap.docs.forEach(d => { userContracts[d.id] = d.data().contrat || 'c1'; });
 
-    // Générer toutes les semaines complètes depuis START_DATE jusqu'à semaine courante exclue
-    const allWeekKeys = [];
-    const cur = new Date(START_DATE);
-    const wd0 = cur.getDay() || 7;
-    cur.setDate(cur.getDate() - wd0 + 1); // premier lundi
-    cur.setHours(0,0,0,0);
-    const thisWeekDate = new Date(thisWeekKey);
-    while (cur < thisWeekDate) {
-      allWeekKeys.push(cur.toISOString().split('T')[0]);
-      cur.setDate(cur.getDate() + 7);
-    }
-
     Object.entries(byUser).forEach(([uid, weekData]) => {
       const base = soldesInitiaux[uid] || 0;
       const contrat = userContracts[uid] || 'c1';
-      // Calculer sur toutes les semaines : heures pointées - objectif ajusté
-      const solde = allWeekKeys.reduce((a, wk) => {
-        const h = weekData[wk] || 0;
+      const solde = Object.entries(weekData).reduce((a, [wk, h]) => {
         const obj = getWeeklyObjectif(contrat, wk, {});
         return a + (h - obj);
       }, 0);
       employeesSolde[uid] = base + solde;
-    });
-
-    // Gérer les users sans aucun pointage mais avec solde initial
-    Object.keys(soldesInitiaux).forEach(uid => {
-      if (employeesSolde[uid] === undefined && soldesInitiaux[uid] !== 0) {
-        employeesSolde[uid] = soldesInitiaux[uid];
-      }
     });
 
     // Ajouter les users avec solde initial mais sans pointages
