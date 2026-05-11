@@ -1021,26 +1021,56 @@ function listenHistory() {
   unsubHist = db.collection('pointages')
     .where('userId', '==', CU.uid)
     .orderBy('endTime', 'desc')
-    .onSnapshot(snap => {
+    .onSnapshot(async snap => {
       if (snap.empty) {
         el.innerHTML = '<div class="empty-state">Aucun pointage enregistré.<br><small>Pointez une arrivée puis un départ pour voir l\'historique.</small></div>';
         return;
       }
       const entries = snap.docs.map(d => d.data()).slice(0,60);
+
+      // Charger les congés CP/maladie/autre validés pour ajuster l'objectif hebdomadaire
+      const cpDaysByWeek = {};
+      try {
+        const congesSnap = await db.collection('conges')
+          .where('userId', '==', CU.uid)
+          .where('status', '==', 'approved')
+          .get();
+        congesSnap.docs.forEach(d => {
+          const c = d.data();
+          if (c.type === 'cp' || c.type === 'maladie' || c.type === 'autre') {
+            const cur = new Date(c.start);
+            const end = new Date(c.end);
+            while (cur <= end) {
+              const wd = cur.getDay();
+              if (wd !== 0 && wd !== 6) {
+                const wdNum = wd || 7;
+                const mon = new Date(cur);
+                mon.setDate(cur.getDate() - wdNum + 1);
+                mon.setHours(12,0,0,0);
+                const wk = mon.getFullYear()+'-'+String(mon.getMonth()+1).padStart(2,'0')+'-'+String(mon.getDate()).padStart(2,'0');
+                if (!cpDaysByWeek[wk]) cpDaysByWeek[wk] = 0;
+                cpDaysByWeek[wk] += (c.duree === 'half_am' || c.duree === 'half_pm') ? 0.5 : 1;
+              }
+              cur.setDate(cur.getDate() + 1);
+            }
+          }
+        });
+      } catch(e) { console.error('Erreur chargement congés historique:', e); }
+
       // Précharger les adresses pour les itinérants
       const itinEntries = entries.filter(e => e.team === 'itinerant');
       if (itinEntries.length) {
-        preloadGeoAddresses(itinEntries).then(() => buildHistoryHTML(entries, el));
+        preloadGeoAddresses(itinEntries).then(() => buildHistoryHTML(entries, el, cpDaysByWeek));
         return;
       }
-      buildHistoryHTML(entries, el);
+      buildHistoryHTML(entries, el, cpDaysByWeek);
     }, err => {
       el.innerHTML = '<div class="empty-state" style="color:#E24B4A">Erreur : ' + err.message + '</div>';
       console.error('Historique erreur:', err);
     });
 }
 
-function buildHistoryHTML(entries, el) {
+function buildHistoryHTML(entries, el, cpDaysByWeek = {}) {
 
       // Calculer le cumul de la semaine en cours
       const now2 = new Date();
@@ -1074,7 +1104,7 @@ function buildHistoryHTML(entries, el) {
         const wkMon = weekCumul[wk].mon;
         const wkFri = new Date(wkMon); wkFri.setDate(wkMon.getDate() + 4);
         const wkTotal = weekCumul[wk].total;
-        const wkObjectif = getWeeklyObjectif(UP?.contrat || 'c1', wk, {});
+        const wkObjectif = getWeeklyObjectif(UP?.contrat || 'c1', wk, cpDaysByWeek);
         const wkColor = wkTotal >= wkObjectif ? '#1D9E75' : '#E24B4A';
         const wkPct = Math.min(Math.round((wkTotal / (wkObjectif || 35)) * 100), 100);
         const isCurrentWeek = wk >= (monDate.getFullYear()+'-'+String(monDate.getMonth()+1).padStart(2,'0')+'-'+String(monDate.getDate()).padStart(2,'0'));
