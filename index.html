@@ -1499,10 +1499,15 @@ async function renderWeeklyRecap() {
     const cpDaysByWeek = {}; // wkKey -> nb jours CP
     let recupDeduction = 0;
 
+    const recupDetails = []; // détail des récups pour affichage
     congesSnap.docs.forEach(d => {
       const c = d.data();
       if (c.type === 'rtt') {
         recupDeduction += c.hoursImpact || 0;
+        const dureeLabel = c.duree === 'half_am' ? 'matin' : (c.duree === 'half_pm' ? 'après-midi' : '');
+        const startFr = new Date(c.start).toLocaleDateString('fr-FR', {day:'2-digit', month:'2-digit', year:'numeric'});
+        const endFr = c.start !== c.end ? new Date(c.end).toLocaleDateString('fr-FR', {day:'2-digit', month:'2-digit', year:'numeric'}) : null;
+        recupDetails.push((endFr ? startFr + ' au ' + endFr : startFr) + (dureeLabel ? ' (' + dureeLabel + ')' : '') + ' : −' + formatDuration(c.hoursImpact || 0));
       } else if (c.type === 'cp' || c.type === 'maladie' || c.type === 'autre') {
         // Compter les jours ouvrés de congé par semaine
         const cur = new Date(c.start);
@@ -1549,8 +1554,26 @@ async function renderWeeklyRecap() {
       soldeLbl.style.color = soldeTotal >= 0 ? '#0F6E56' : '#E24B4A';
       const nbSemaines = Object.keys(weeks).filter(k => k !== thisWeekKey).length;
       const soldeInitialStr = soldeInitial !== 0 ? ' · Init : ' + formatSolde(soldeInitial) : '';
-      const recupStr = recupDeduction > 0 ? ' · Récup utilisées : ' + formatDuration(recupDeduction) : '';
-      soldeDetail.textContent = 'Depuis le 13/04/2025 · ' + nbSemaines + ' semaine' + (nbSemaines > 1 ? 's' : '') + soldeInitialStr + recupStr;
+      const recupStr = recupDeduction > 0
+        ? ' · <span id="recup-toggle" style="cursor:pointer;text-decoration:underline dotted;color:#7F77DD;" title="Cliquez pour voir le détail">Récup utilisées : ' + formatDuration(recupDeduction) + '</span>'
+        : '';
+      soldeDetail.innerHTML = 'Depuis le 13/04/2025 · ' + nbSemaines + ' semaine' + (nbSemaines > 1 ? 's' : '') + soldeInitialStr + recupStr;
+
+      // Ajouter/supprimer le détail des récups au clic
+      const recupToggle = document.getElementById('recup-toggle');
+      const recupDetailEl = document.getElementById('recup-detail');
+      if (recupDetailEl) recupDetailEl.remove();
+      if (recupToggle && recupDetails.length) {
+        recupToggle.addEventListener('click', () => {
+          const existing = document.getElementById('recup-detail');
+          if (existing) { existing.remove(); return; }
+          const div = document.createElement('div');
+          div.id = 'recup-detail';
+          div.style.cssText = 'margin-top:8px;background:#EEEDFE;border-radius:8px;padding:8px 12px;font-size:11px;color:#534AB7;line-height:1.8;text-align:left;';
+          div.innerHTML = recupDetails.map(r => '• ' + r).join('<br>');
+          soldeDetail.parentNode.insertBefore(div, soldeDetail.nextSibling);
+        });
+      }
     }
 
     if (!sorted.length) {
