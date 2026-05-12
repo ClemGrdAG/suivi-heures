@@ -1037,23 +1037,8 @@ function listenHistory() {
           .get();
         congesSnap.docs.forEach(d => {
           const c = d.data();
-          if (c.type === 'cp' || c.type === 'maladie' || c.type === 'autre') {
-            const cur = new Date(c.start);
-            const end = new Date(c.end);
-            while (cur <= end) {
-              const wd = cur.getDay();
-              if (wd !== 0 && wd !== 6) {
-                const wdNum = wd || 7;
-                const mon = new Date(cur);
-                mon.setDate(cur.getDate() - wdNum + 1);
-                mon.setHours(12,0,0,0);
-                const wk = mon.getFullYear()+'-'+String(mon.getMonth()+1).padStart(2,'0')+'-'+String(mon.getDate()).padStart(2,'0');
-                if (!cpDaysByWeek[wk]) cpDaysByWeek[wk] = 0;
-                cpDaysByWeek[wk] += (c.duree === 'half_am' || c.duree === 'half_pm') ? 0.5 : 1;
-              }
-              cur.setDate(cur.getDate() + 1);
-            }
-          }
+          // CP, maladie, autre ET récup réduisent tous l'objectif hebdomadaire
+          addCongeToCpDaysByWeek(c, cpDaysByWeek);
         });
       } catch(e) { console.error('Erreur chargement congés historique:', e); }
 
@@ -1329,6 +1314,26 @@ async function renderStats() {
   await renderWeeklyRecap();
 }
 
+
+// Ajoute les jours ouvrés d'un congé dans cpDaysByWeek (utilisé pour CP, maladie, autre ET récup)
+function addCongeToCpDaysByWeek(c, cpDaysByWeek) {
+  const cur = new Date(c.start);
+  const end = new Date(c.end);
+  while (cur <= end) {
+    const wd = cur.getDay();
+    if (wd !== 0 && wd !== 6) {
+      const wdNum = wd || 7;
+      const mon = new Date(cur);
+      mon.setDate(cur.getDate() - wdNum + 1);
+      mon.setHours(12,0,0,0);
+      const wk = mon.getFullYear()+'-'+String(mon.getMonth()+1).padStart(2,'0')+'-'+String(mon.getDate()).padStart(2,'0');
+      if (!cpDaysByWeek[wk]) cpDaysByWeek[wk] = 0;
+      cpDaysByWeek[wk] += (c.duree === 'half_am' || c.duree === 'half_pm') ? 0.5 : 1;
+    }
+    cur.setDate(cur.getDate() + 1);
+  }
+}
+
 // Calcule les jours fériés français pour une année donnée
 function getFeriesForYear(year) {
   const feries = new Set();
@@ -1508,26 +1513,9 @@ async function renderWeeklyRecap() {
         const startFr = new Date(c.start).toLocaleDateString('fr-FR', {day:'2-digit', month:'2-digit', year:'numeric'});
         const endFr = c.start !== c.end ? new Date(c.end).toLocaleDateString('fr-FR', {day:'2-digit', month:'2-digit', year:'numeric'}) : null;
         recupDetails.push((endFr ? startFr + ' au ' + endFr : startFr) + (dureeLabel ? ' (' + dureeLabel + ')' : '') + ' : −' + formatDuration(c.hoursImpact || 0));
-      } else if (c.type === 'cp' || c.type === 'maladie' || c.type === 'autre') {
-        // Compter les jours ouvrés de congé par semaine
-        const cur = new Date(c.start);
-        const end = new Date(c.end);
-        while (cur <= end) {
-          const wd = cur.getDay();
-          if (wd !== 0 && wd !== 6) { // jours ouvrés seulement
-            const wdNum = wd || 7;
-            const mon = new Date(cur);
-            mon.setDate(cur.getDate() - wdNum + 1);
-            mon.setHours(0,0,0,0);
-            mon.setHours(12,0,0,0);
-            const wk = mon.getFullYear()+'-'+String(mon.getMonth()+1).padStart(2,'0')+'-'+String(mon.getDate()).padStart(2,'0');
-            if (!cpDaysByWeek[wk]) cpDaysByWeek[wk] = 0;
-            // Demi-journée = 0.5 jour
-            cpDaysByWeek[wk] += (c.duree === 'half_am' || c.duree === 'half_pm') ? 0.5 : 1;
-          }
-          cur.setDate(cur.getDate() + 1);
-        }
       }
+      // CP, maladie, autre ET récup réduisent tous l'objectif hebdomadaire
+      addCongeToCpDaysByWeek(c, cpDaysByWeek);
     });
 
     // Calculer le solde total — objectif ajusté par contrat et CP
@@ -1781,27 +1769,42 @@ async function computeAllSoldes() {
       .where('status', '==', 'approved')
       .get();
 
+    // Construire cpDaysByWeek par userId (CP + maladie + autre + récup réduisent l'objectif)
+    const cpDaysByUserWeek = {}; // uid -> { wk -> jours }
     allCongesSnap.docs.forEach(d => {
       const c = d.data();
       if (!c.userId) return;
+      if (!cpDaysByUserWeek[c.userId]) cpDaysByUserWeek[c.userId] = {};
+      addCongeToCpDaysByWeek(c, cpDaysByUserWeek[c.userId]);
+      // Les récups déduisent aussi du solde
       if (c.type === 'rtt') {
-        // Déduire les récups
         if (!employeesSolde[c.userId]) employeesSolde[c.userId] = soldesInitiaux[c.userId] || 0;
         employeesSolde[c.userId] -= (c.hoursImpact || 0);
-      } else {
-        // CP/maladie/autre : ajouter 7h par jour de congé à l'objectif réduit
-        const cur = new Date(c.start);
-        const end = new Date(c.end);
-        while (cur <= end) {
-          const wd = cur.getDay();
-          if (wd !== 0 && wd !== 6) {
-            const hours = (c.duree === 'half_am' || c.duree === 'half_pm') ? 3.5 : 7;
-            if (!employeesSolde[c.userId]) employeesSolde[c.userId] = soldesInitiaux[c.userId] || 0;
-            employeesSolde[c.userId] += hours; // réduire l'objectif = ajouter au solde
-          }
-          cur.setDate(cur.getDate() + 1);
-        }
       }
+    });
+
+    // Recalculer les soldes avec les objectifs ajustés (CP + récup + fériés)
+    employeesSolde = {};
+    Object.entries(byUser).forEach(([uid, weekData]) => {
+      const base = soldesInitiaux[uid] || 0;
+      const contrat = userContracts[uid] || 'c1';
+      const cpMap = cpDaysByUserWeek[uid] || {};
+      const solde = Object.entries(weekData).reduce((a, [wk, h]) => {
+        const obj = getWeeklyObjectif(contrat, wk, cpMap);
+        return a + (h - obj);
+      }, 0);
+      employeesSolde[uid] = base + solde;
+    });
+    // Users avec solde initial mais sans pointages
+    Object.entries(soldesInitiaux).forEach(([uid, si]) => {
+      if (si !== 0 && employeesSolde[uid] === undefined) employeesSolde[uid] = si;
+    });
+    // Appliquer les déductions de récups
+    allCongesSnap.docs.forEach(d => {
+      const c = d.data();
+      if (!c.userId || c.type !== 'rtt') return;
+      if (!employeesSolde[c.userId]) employeesSolde[c.userId] = soldesInitiaux[c.userId] || 0;
+      employeesSolde[c.userId] -= (c.hoursImpact || 0);
     });
 
   } catch(e) { console.error(e); }
