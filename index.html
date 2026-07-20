@@ -250,6 +250,12 @@ input:focus, select:focus { outline: none; border-color: var(--ag-gold); backgro
         <button class="geo-btn" id="geo-btn">📍 Me localiser</button>
         <div class="geo-txt" id="geo-txt"></div>
       </div>
+      <div id="ecole-card" style="display:none;background:#EEEDFE;border-radius:14px;padding:1rem 1.25rem;margin-bottom:14px;">
+        <div style="font-size:11px;color:#534AB7;text-transform:uppercase;letter-spacing:0.6px;font-weight:600;margin-bottom:8px;">Semaine école</div>
+        <div style="font-size:13px;color:#534AB7;margin-bottom:10px;">En formation cette semaine ? Ajoutez vos 35h en un clic.</div>
+        <button id="btn-ecole" style="background:#534AB7;color:#fff;border:none;border-radius:10px;padding:10px 20px;font-size:14px;font-weight:600;cursor:pointer;font-family:inherit;width:100%;">📚 Ajouter la semaine école (35h)</button>
+        <div id="ecole-msg" style="font-size:12px;margin-top:8px;min-height:16px;color:#534AB7;"></div>
+      </div>
       <div class="card">
         <div class="card-title">Semaine en cours</div>
         <div class="week-grid" id="week-grid"></div>
@@ -467,6 +473,7 @@ input:focus, select:focus { outline: none; border-color: var(--ag-gold); backgro
         <option value="c1">Contrat 1 — 35h sur 5 jours (7h/jour)</option>
         <option value="c2">Contrat 2 — 35h lundi-vendredi midi</option>
         <option value="c3">Contrat 3 — Alternance 4j/5j (Alexandre)</option>
+        <option value="c4">Contrat 4 — Apprentis (école/entreprise)</option>
       </select>
       <div class="error" id="contrat-err"></div>
       <div class="modal-actions">
@@ -760,6 +767,9 @@ async function loadProfile() {
       const teamDisplay = document.getElementById('p-team-display');
       if (teamDisplay) teamDisplay.textContent = (UP.team === 'itinerant') ? 'Itinérant' : 'Sédentaire';
       if (document.getElementById('p-contrat')) document.getElementById('p-contrat').value = UP.contrat || 'c1';
+      // Afficher le bouton école pour les apprentis
+      const ecoleCard = document.getElementById('ecole-card');
+      if (ecoleCard) ecoleCard.style.display = (UP.contrat === 'c4') ? 'block' : 'none';
     }
   } catch(e) { console.error(e); }
 }
@@ -859,13 +869,12 @@ let geoEnd = null;   // position au badge OUT
 
 document.getElementById('badge-btn').addEventListener('click', async () => {
   const now = new Date();
-  const isItinerant = UP?.team === 'itinerant';
   const geoErr = document.getElementById('geo-txt');
   const geoBtn = document.getElementById('geo-btn');
 
   if (!isBadged) {
-    // BADGE IN — bloquer itinérant sans geo
-    if (isItinerant && !geoStart) {
+    // BADGE IN — géo obligatoire pour tous
+    if (!geoStart) {
       geoErr.style.color = '#E24B4A';
       geoErr.style.fontWeight = '500';
       geoErr.textContent = '⚠ Veuillez cliquer sur "Me localiser" avant de pointer l\'arrivée';
@@ -879,12 +888,9 @@ document.getElementById('badge-btn').addEventListener('click', async () => {
     const inViolations = await checkHoraires('in', now);
     const inAlert = inViolations.length > 0 ? inViolations[0] : null;
     if (inAlert) { showHoraireAlert(inAlert, true); } else { showHoraireAlert('', false); }
-    // Mettre à jour le bouton geo pour indiquer qu'il faut pointer la position de départ
-    if (isItinerant) {
-      geoErr.textContent = '✓ Position arrivée enregistrée — vous devrez relocaliser au départ';
-      geoErr.style.color = '#854F0B';
-      geoEnd = null; // forcer re-localisation au départ
-    }
+    // Indiquer qu'il faudra relocaliser au départ
+    geoErr.textContent = '✓ Position arrivée enregistrée — vous devrez relocaliser au départ';
+    geoErr.style.color = '#854F0B';
     try {
       await db.collection('badges').doc(CU.uid).set({
         active: true, startTime: badgeTime,
@@ -899,8 +905,8 @@ document.getElementById('badge-btn').addEventListener('click', async () => {
     } catch(e) { isBadged = false; badgeTime = null; alert('Erreur de connexion.'); }
 
   } else {
-    // BADGE OUT — bloquer itinérant sans geo départ
-    if (isItinerant && !geoEnd) {
+    // BADGE OUT — géo obligatoire pour tous
+    if (!geoEnd) {
       geoErr.style.color = '#E24B4A';
       geoErr.style.fontWeight = '500';
       geoErr.textContent = '⚠ Veuillez cliquer sur "Me localiser" pour enregistrer votre position de départ';
@@ -1011,6 +1017,80 @@ function triggerGeo() {
   );
 }
 
+
+// =============================================
+// BOUTON SEMAINE ÉCOLE (Contrat 4 — Apprentis)
+// =============================================
+document.getElementById('btn-ecole').addEventListener('click', async () => {
+  const btn = document.getElementById('btn-ecole');
+  const msg = document.getElementById('ecole-msg');
+  msg.textContent = '';
+
+  // Calculer lundi et vendredi de la semaine en cours
+  const now = new Date();
+  const day = now.getDay() || 7;
+  const lundi = new Date(now);
+  lundi.setDate(now.getDate() - day + 1);
+  lundi.setHours(0, 0, 0, 0);
+  const vendredi = new Date(lundi);
+  vendredi.setDate(lundi.getDate() + 4);
+
+  const lundiStr = lundi.toLocaleDateString('fr-FR', {day:'2-digit', month:'2-digit', year:'numeric'});
+  const vendrediStr = vendredi.toLocaleDateString('fr-FR', {day:'2-digit', month:'2-digit', year:'numeric'});
+
+  // Vérifier si un pointage école existe déjà cette semaine
+  const lundiISO = lundi.getFullYear()+'-'+String(lundi.getMonth()+1).padStart(2,'0')+'-'+String(lundi.getDate()).padStart(2,'0');
+  const vendrediEnd = new Date(vendredi); vendrediEnd.setHours(23,59,59,999);
+  const existing = await db.collection('pointages')
+    .where('userId', '==', CU.uid)
+    .where('ecole', '==', true)
+    .where('date', '>=', lundiISO)
+    .get();
+
+  if (!existing.empty) {
+    msg.style.color = '#854F0B';
+    msg.textContent = '✓ Semaine école déjà enregistrée pour cette semaine.';
+    return;
+  }
+
+  if (!confirm('Ajouter 35h de formation pour la semaine du ' + lundiStr + ' au ' + vendrediStr + ' ?')) return;
+
+  btn.disabled = true;
+  btn.textContent = '⏳ Enregistrement...';
+
+  try {
+    // Créer un pointage de 35h du lundi 8h au vendredi 15h (= 35h sur 5 jours)
+    const startTime = new Date(lundi); startTime.setHours(8, 0, 0, 0);
+    const endTime = new Date(vendredi); endTime.setHours(15, 0, 0, 0);
+
+    await db.collection('pointages').add({
+      userId: CU.uid,
+      userName: UP?.name || CU.email,
+      startTime: startTime.toISOString(),
+      endTime: endTime.toISOString(),
+      duration: 35,
+      date: lundiISO,
+      team: UP?.team || 'sedentaire',
+      ecole: true, // marqueur semaine école
+      geoStart: null,
+      geoEnd: null,
+      geo: null,
+      alert: null
+    });
+
+    msg.style.color = '#0F6E56';
+    msg.textContent = '✓ 35h de formation ajoutées pour la semaine du ' + lundiStr + ' au ' + vendrediStr;
+    renderWeek();
+    renderStats();
+  } catch(e) {
+    msg.style.color = '#E24B4A';
+    msg.textContent = 'Erreur : ' + e.message;
+  } finally {
+    btn.disabled = false;
+    btn.textContent = '📚 Ajouter la semaine école (35h)';
+  }
+});
+
 // =============================================
 // HISTORIQUE
 // =============================================
@@ -1042,13 +1122,8 @@ function listenHistory() {
         });
       } catch(e) { console.error('Erreur chargement congés historique:', e); }
 
-      // Précharger les adresses pour les itinérants
-      const itinEntries = entries.filter(e => e.team === 'itinerant');
-      if (itinEntries.length) {
-        preloadGeoAddresses(itinEntries).then(() => buildHistoryHTML(entries, el, cpDaysByWeek));
-        return;
-      }
-      buildHistoryHTML(entries, el, cpDaysByWeek);
+      // Précharger les adresses pour tous
+      preloadGeoAddresses(entries).then(() => buildHistoryHTML(entries, el, cpDaysByWeek));
     }, err => {
       el.innerHTML = '<div class="empty-state" style="color:#E24B4A">Erreur : ' + err.message + '</div>';
       console.error('Historique erreur:', err);
@@ -1133,28 +1208,25 @@ function buildHistoryHTML(entries, el, cpDaysByWeek = {}) {
             const start = new Date(e.startTime);
             const end = new Date(e.endTime);
             const startHour = start.getHours();
-            const period = startHour < 12 ? 'Matin' : 'Après-midi';
-            const periodColor = startHour < 12 ? '#534AB7' : '#0F6E56';
-            const periodBg = startHour < 12 ? '#EEEDFE' : '#E1F5EE';
+            const isEcole = e.ecole === true;
+            const period = isEcole ? 'Semaine école' : (startHour < 12 ? 'Matin' : 'Après-midi');
+            const periodColor = isEcole ? '#534AB7' : (startHour < 12 ? '#534AB7' : '#0F6E56');
+            const periodBg = isEcole ? '#EEEDFE' : (startHour < 12 ? '#EEEDFE' : '#E1F5EE');
             const s = start.toLocaleTimeString('fr-FR',{hour:'2-digit',minute:'2-digit'});
             const en2 = end.toLocaleTimeString('fr-FR',{hour:'2-digit',minute:'2-digit'});
 
-            // Adresses
-            const isItin = e.team === 'itinerant';
+            // Adresses — affichées pour tous
+            const gsKey = e.geoStart ? e.geoStart.lat + ',' + e.geoStart.lng : (e.geo ? e.geo.lat + ',' + e.geo.lng : null);
+            const geKey = e.geoEnd ? e.geoEnd.lat + ',' + e.geoEnd.lng : null;
+            const addrS = gsKey ? (geoAddrCache[gsKey] || gsKey) : null;
+            const addrE = geKey ? (geoAddrCache[geKey] || geKey) : null;
             let locHtml = '';
-            if (isItin) {
-              const gsKey = e.geoStart ? e.geoStart.lat + ',' + e.geoStart.lng : (e.geo ? e.geo.lat + ',' + e.geo.lng : null);
-              const geKey = e.geoEnd ? e.geoEnd.lat + ',' + e.geoEnd.lng : null;
-              const addrS = gsKey ? (geoAddrCache[gsKey] || gsKey) : null;
-              const addrE = geKey ? (geoAddrCache[geKey] || geKey) : null;
-              if (addrS || addrE) {
-                locHtml = '<div style="font-size:11px;color:#888;margin-top:3px;">' +
-                  (addrS ? '📍 Arrivée : ' + addrS : '') +
-                  (addrE ? '<br>📍 Départ : ' + addrE : '') +
-                  '</div>';
-              }
-            } else {
-              locHtml = '<div style="font-size:11px;color:#bbb;margin-top:3px;">🏢 Bureau</div>';
+            if (addrS || addrE) {
+              locHtml = '<div style="font-size:11px;color:#888;margin-top:3px;">' +
+                (addrS ? '📍 Arrivée : ' + addrS : '<span style="color:#bbb;">📍 Arrivée : non enregistrée</span>') +
+                '<br>' +
+                (addrE ? '📍 Départ : ' + addrE : '<span style="color:#bbb;">📍 Départ : non enregistré</span>') +
+                '</div>';
             }
 
             html += '<div class="h-item" style="padding:6px 0 6px 10px;border-left:2px solid #f0f0f0;">' +
@@ -1162,12 +1234,9 @@ function buildHistoryHTML(entries, el, cpDaysByWeek = {}) {
               '<div style="display:flex;align-items:center;gap:6px;margin-bottom:3px;">' +
               '<span style="font-size:11px;font-weight:600;padding:1px 7px;border-radius:6px;background:' + periodBg + ';color:' + periodColor + ';">' + period + '</span>' +
               '</div>' +
-              '<div class="h-main">' +
-              '<span class="h-dot dot-in"></span>' + s +
-              '<span style="color:#ccc;margin:0 4px">→</span>' +
-              '<span class="h-dot dot-out"></span>' + en2 +
-              '<span class="h-dur">' + formatDuration(e.duration) + '</span>' +
-              '</div>' +
+              (isEcole
+                ? '<div class="h-main">📚 Semaine de formation complète<span class="h-dur">' + formatDuration(e.duration) + '</span></div>'
+                : '<div class="h-main"><span class="h-dot dot-in"></span>' + s + '<span style="color:#ccc;margin:0 4px">→</span><span class="h-dot dot-out"></span>' + en2 + '<span class="h-dur">' + formatDuration(e.duration) + '</span></div>') +
               locHtml +
               '</div>' +
               '</div>';
@@ -1419,6 +1488,10 @@ function getWeeklyObjectif(contrat, weekKey, cpDaysByWeek) {
     // = 7.875h/jour x4 + 3.5h = 35h
     objectifBase = 35;
     joursTravailles = 4.5;
+  } else if (contrat === 'c4') {
+    // Apprentis : 35h/5j comme contrat 1 (semaines école = pointage manuel)
+    objectifBase = 35;
+    joursTravailles = 5;
   } else if (contrat === 'c3') {
     // Semaines impaires = 4 jours (8h45/jour), paires = 5 jours (7h/jour)
     const weekNum = getWeekNumber(new Date(weekKey));
@@ -1620,12 +1693,7 @@ function listenAllPointages() {
       allPointagesData = snap.docs.map(d => ({ id: d.id, ...d.data() }));
       updateAdminStats();
       // Précharger les adresses puis afficher
-      const itinData = allPointagesData.filter(e => e.team === 'itinerant');
-      if (itinData.length) {
-        preloadGeoAddresses(itinData).then(() => renderAllPointages());
-      } else {
-        renderAllPointages();
-      }
+      preloadGeoAddresses(allPointagesData).then(() => renderAllPointages());
     });
   } catch(e) { console.error(e); }
 }
@@ -1649,20 +1717,15 @@ function renderAllPointages() {
     const s = new Date(e.startTime).toLocaleTimeString('fr-FR',{hour:'2-digit',minute:'2-digit'});
     const en = end.toLocaleTimeString('fr-FR',{hour:'2-digit',minute:'2-digit'});
     const alertIcon = e.alert ? '<span style="font-size:11px;color:#A32D2D;background:#FDEAEA;border-radius:5px;padding:1px 6px;margin-left:6px;">⚠ ' + e.alert + '</span>' : '';
-    const isItin = e.team === 'itinerant';
     const gsKeyA = e.geoStart ? e.geoStart.lat + ',' + e.geoStart.lng : (e.geo ? e.geo.lat + ',' + e.geo.lng : null);
     const geKeyA = e.geoEnd ? e.geoEnd.lat + ',' + e.geoEnd.lng : null;
-    // Récupérer depuis le cache ou afficher "Chargement..."
     const addrStartA = gsKeyA ? (geoAddrCache[gsKeyA] || gsKeyA) : null;
     const addrEndA = geKeyA ? (geoAddrCache[geKeyA] || geKeyA) : null;
-    const locLine = isItin
-      ? (gsKeyA || geKeyA
-          ? '<div style="font-size:11px;color:#888;margin-top:2px;">' +
-            (gsKeyA ? '📍 Arrivée : ' + addrStartA : '') +
-            (geKeyA ? '<br>📍 Départ : ' + addrEndA : '') +
-            '</div>'
-          : '<div style="font-size:11px;color:#bbb;margin-top:2px;">📍 Position non enregistrée</div>')
-      : '<div style="font-size:11px;color:#bbb;margin-top:2px;">🏢 Bureau</div>';
+    const locLine = '<div style="font-size:11px;color:#888;margin-top:2px;">' +
+      (addrStartA ? '📍 Arrivée : ' + addrStartA : '<span style="color:#bbb;">📍 Arrivée : non enregistrée</span>') +
+      '<br>' +
+      (addrEndA ? '📍 Départ : ' + addrEndA : '<span style="color:#bbb;">📍 Départ : non enregistré</span>') +
+      '</div>';
     return `<div class="pointage-row" style="${e.alert ? 'border-left:3px solid #E24B4A;padding-left:8px;' : ''}">
       <div class="pointage-info">
         <div class="pointage-name">${e.userName || 'Inconnu'}${alertIcon}</div>
@@ -1830,7 +1893,7 @@ function listenEmployees() {
           <div class="avatar ${isActive?'':'inactive'}">${ini}</div>
           <div class="admin-row-info">
             <div class="emp-name">${u.name||'Sans nom'}</div>
-            <div class="emp-sub">${u.email||''} · ${u.team==='itinerant'?'Itinérant':'Sédentaire'} · ${u.contrat==='c2'?'Contrat 2':u.contrat==='c3'?'Contrat 3':'Contrat 1'}</div>
+            <div class="emp-sub">${u.email||''} · ${u.team==='itinerant'?'Itinérant':'Sédentaire'} · ${u.contrat==='c2'?'Contrat 2':u.contrat==='c3'?'Contrat 3':u.contrat==='c4'?'Contrat 4':'Contrat 1'}</div>
           </div>
           <div class="admin-row-actions" style="flex-wrap:wrap;justify-content:flex-end;">
             <span style="font-size:11px;font-weight:600;padding:3px 8px;border-radius:10px;background:${soldeBg};color:${soldeColor};">${soldeStr}</span>
