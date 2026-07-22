@@ -795,6 +795,15 @@ async function checkBadge() {
     const snap = await db.collection('badges').doc(CU.uid).get();
     if (snap.exists && snap.data().active) {
       isBadged = true; badgeTime = snap.data().startTime;
+      // Restaurer geoStart depuis Firebase pour le cas où l'appli a été fermée entre arrivée et départ
+      if (snap.data().geoStart) {
+        geoStart = snap.data().geoStart;
+        const geoErr = document.getElementById('geo-txt');
+        if (geoErr) {
+          geoErr.textContent = '✓ Position arrivée enregistrée — vous devrez relocaliser au départ';
+          geoErr.style.color = '#854F0B';
+        }
+      }
       startTimer(); updateBadgeUI(true);
     }
   } catch(e) { console.error(e); }
@@ -928,6 +937,15 @@ document.getElementById('badge-btn').addEventListener('click', async () => {
     const roundedStart = roundToQuarter(new Date(badgeTime));
     const roundedEnd = roundToQuarter(now);
     const dur = (roundedEnd - roundedStart) / 3600000;
+    // Sécurité : si geoStart est perdu en mémoire, le relire depuis Firebase
+    if (!geoStart) {
+      try {
+        const badgeSnap = await db.collection('badges').doc(CU.uid).get();
+        if (badgeSnap.exists && badgeSnap.data().geoStart) {
+          geoStart = badgeSnap.data().geoStart;
+        }
+      } catch(e) { console.error('Impossible de récupérer geoStart:', e); }
+    }
     try {
       await db.collection('pointages').add({
         userId: CU.uid, userName: UP?.name || CU.email,
