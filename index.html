@@ -1114,20 +1114,6 @@ document.getElementById('btn-ecole').addEventListener('click', async () => {
   const lundiISO = lundi.getFullYear()+'-'+String(lundi.getMonth()+1).padStart(2,'0')+'-'+String(lundi.getDate()).padStart(2,'0');
   const vendrediISO = vendredi.getFullYear()+'-'+String(vendredi.getMonth()+1).padStart(2,'0')+'-'+String(vendredi.getDate()).padStart(2,'0');
 
-  // Vérifier si un pointage école existe déjà cette semaine (requête simple, filtre JS)
-  const existing = await db.collection('pointages')
-    .where('userId', '==', CU.uid)
-    .where('date', '>=', lundiISO)
-    .where('date', '<=', vendrediISO)
-    .get();
-
-  const alreadyEcole = existing.docs.some(d => d.data().ecole === true);
-  if (alreadyEcole) {
-    msg.style.color = '#854F0B';
-    msg.textContent = '✓ Semaine école déjà enregistrée pour cette semaine.';
-    return;
-  }
-
   if (!confirm('Ajouter 35h de formation pour la semaine du ' + lundiStr + ' au ' + vendrediStr + ' ?')) return;
 
   btn.disabled = true;
