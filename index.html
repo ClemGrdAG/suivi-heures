@@ -1116,27 +1116,33 @@ document.getElementById('btn-ecole').addEventListener('click', async () => {
   btn.textContent = '⏳ Enregistrement...';
 
   try {
-    // Créer un pointage de 35h du lundi 8h au vendredi 15h (= 35h sur 5 jours)
-    const startTime = new Date(lundi); startTime.setHours(8, 0, 0, 0);
-    const endTime = new Date(vendredi); endTime.setHours(15, 0, 0, 0);
-
-    await db.collection('pointages').add({
-      userId: CU.uid,
-      userName: UP?.name || CU.email,
-      startTime: startTime.toISOString(),
-      endTime: endTime.toISOString(),
-      duration: 35,
-      date: lundiISO,
-      team: UP?.team || 'sedentaire',
-      ecole: true, // marqueur semaine école
-      geoStart: null,
-      geoEnd: null,
-      geo: null,
-      alert: null
-    });
+    // Créer 5 pointages distincts de 7h (un par jour lundi→vendredi)
+    const jours = ['Lundi','Mardi','Mercredi','Jeudi','Vendredi'];
+    for (let i = 0; i < 5; i++) {
+      const jour = new Date(lundi);
+      jour.setDate(lundi.getDate() + i);
+      jour.setHours(12,0,0,0);
+      const jourISO = jour.getFullYear()+'-'+String(jour.getMonth()+1).padStart(2,'0')+'-'+String(jour.getDate()).padStart(2,'0');
+      const startTime = new Date(jour); startTime.setHours(8, 0, 0, 0);
+      const endTime = new Date(jour); endTime.setHours(15, 0, 0, 0);
+      await db.collection('pointages').add({
+        userId: CU.uid,
+        userName: UP?.name || CU.email,
+        startTime: startTime.toISOString(),
+        endTime: endTime.toISOString(),
+        duration: 7,
+        date: jourISO,
+        team: UP?.team || 'sedentaire',
+        ecole: true,
+        geoStart: null,
+        geoEnd: null,
+        geo: null,
+        alert: null
+      });
+    }
 
     msg.style.color = '#0F6E56';
-    msg.textContent = '✓ 35h de formation ajoutées pour la semaine du ' + lundiStr + ' au ' + vendrediStr;
+    msg.textContent = '✓ 35h de formation ajoutées pour la semaine du ' + lundiStr + ' au ' + vendrediStr + ' (7h/jour)';
     renderWeek();
     renderStats();
   } catch(e) {
