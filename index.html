@@ -252,7 +252,12 @@ input:focus, select:focus { outline: none; border-color: var(--ag-gold); backgro
       </div>
       <div id="ecole-card" style="display:none;background:#EEEDFE;border-radius:14px;padding:1rem 1.25rem;margin-bottom:14px;">
         <div style="font-size:11px;color:#534AB7;text-transform:uppercase;letter-spacing:0.6px;font-weight:600;margin-bottom:8px;">Semaine école</div>
-        <div style="font-size:13px;color:#534AB7;margin-bottom:10px;">En formation cette semaine ? Ajoutez vos 35h en un clic.</div>
+        <div style="font-size:13px;color:#534AB7;margin-bottom:10px;">Sélectionnez la semaine de formation et ajoutez vos 35h en un clic.</div>
+        <div style="margin-bottom:10px;">
+          <label style="font-size:12px;color:#534AB7;font-weight:500;display:block;margin-bottom:4px;">Semaine concernée (lundi)</label>
+          <input type="date" id="ecole-date-picker" style="margin-bottom:0;border-color:#534AB7;font-size:13px;" />
+          <div id="ecole-week-label" style="font-size:11px;color:#7F77DD;margin-top:4px;min-height:14px;"></div>
+        </div>
         <button id="btn-ecole" style="background:#534AB7;color:#fff;border:none;border-radius:10px;padding:10px 20px;font-size:14px;font-weight:600;cursor:pointer;font-family:inherit;width:100%;">📚 Ajouter la semaine école (35h)</button>
         <div id="ecole-msg" style="font-size:12px;margin-top:8px;min-height:16px;color:#534AB7;"></div>
       </div>
@@ -387,11 +392,22 @@ input:focus, select:focus { outline: none; border-color: var(--ag-gold); backgro
   <!-- Modal édition pointage -->
   <div class="modal-overlay" id="modal-edit" style="display:none">
     <div class="modal">
-      <h3>Modifier le pointage</h3>
-      <label style="font-size:13px;color:#666;display:block;margin-bottom:4px">Heure d'arrivée</label>
-      <input type="datetime-local" id="edit-start" />
-      <label style="font-size:13px;color:#666;display:block;margin-bottom:4px">Heure de départ</label>
-      <input type="datetime-local" id="edit-end" />
+      <h3 id="edit-modal-title">Modifier le pointage</h3>
+      <!-- Mode normal -->
+      <div id="edit-normal-fields">
+        <label style="font-size:13px;color:#666;display:block;margin-bottom:4px">Heure d'arrivée</label>
+        <input type="datetime-local" id="edit-start" />
+        <label style="font-size:13px;color:#666;display:block;margin-bottom:4px">Heure de départ</label>
+        <input type="datetime-local" id="edit-end" />
+      </div>
+      <!-- Mode école -->
+      <div id="edit-ecole-fields" style="display:none">
+        <div style="background:#EEEDFE;border-radius:8px;padding:10px 12px;margin-bottom:12px;font-size:13px;color:#534AB7;">📚 Pointage semaine école</div>
+        <label style="font-size:13px;color:#666;display:block;margin-bottom:4px">Semaine (lundi)</label>
+        <input type="date" id="edit-ecole-date" />
+        <label style="font-size:13px;color:#666;display:block;margin-bottom:4px;margin-top:8px;">Nombre d'heures</label>
+        <input type="number" id="edit-ecole-hours" step="0.5" min="1" max="40" value="35" />
+      </div>
       <div class="modal-actions">
         <button class="btn-secondary" onclick="closeModal()">Annuler</button>
         <button class="btn-primary" id="modal-save">Enregistrer</button>
@@ -769,7 +785,10 @@ async function loadProfile() {
       if (document.getElementById('p-contrat')) document.getElementById('p-contrat').value = UP.contrat || 'c1';
       // Afficher le bouton école pour les apprentis
       const ecoleCard = document.getElementById('ecole-card');
-      if (ecoleCard) ecoleCard.style.display = (UP.contrat === 'c4') ? 'block' : 'none';
+      if (ecoleCard) {
+        ecoleCard.style.display = (UP.contrat === 'c4') ? 'block' : 'none';
+        if (UP.contrat === 'c4') initEcoleDatePicker();
+      }
     }
   } catch(e) { console.error(e); }
 }
@@ -1039,33 +1058,71 @@ function triggerGeo() {
 // =============================================
 // BOUTON SEMAINE ÉCOLE (Contrat 4 — Apprentis)
 // =============================================
+function initEcoleDatePicker() {
+  // Initialiser au lundi de la semaine en cours
+  const now = new Date();
+  const day = now.getDay() || 7;
+  const lundi = new Date(now);
+  lundi.setDate(now.getDate() - day + 1);
+  lundi.setHours(12,0,0,0);
+  const lundiISO = lundi.getFullYear()+'-'+String(lundi.getMonth()+1).padStart(2,'0')+'-'+String(lundi.getDate()).padStart(2,'0');
+  const picker = document.getElementById('ecole-date-picker');
+  if (picker) {
+    picker.value = lundiISO;
+    updateEcoleWeekLabel(lundiISO);
+    picker.addEventListener('change', () => {
+      // Forcer au lundi de la semaine sélectionnée
+      const d = new Date(picker.value + 'T12:00:00');
+      const wd = d.getDay() || 7;
+      d.setDate(d.getDate() - wd + 1);
+      const monISO = d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0');
+      picker.value = monISO;
+      updateEcoleWeekLabel(monISO);
+      document.getElementById('ecole-msg').textContent = '';
+    });
+  }
+}
+
+function updateEcoleWeekLabel(lundiISO) {
+  const lundi = new Date(lundiISO + 'T12:00:00');
+  const vendredi = new Date(lundi);
+  vendredi.setDate(lundi.getDate() + 4);
+  const label = document.getElementById('ecole-week-label');
+  if (label) {
+    label.textContent = 'Semaine du ' +
+      lundi.toLocaleDateString('fr-FR', {day:'2-digit', month:'long'}) + ' au ' +
+      vendredi.toLocaleDateString('fr-FR', {day:'2-digit', month:'long', year:'numeric'});
+  }
+}
+
 document.getElementById('btn-ecole').addEventListener('click', async () => {
   const btn = document.getElementById('btn-ecole');
   const msg = document.getElementById('ecole-msg');
   msg.textContent = '';
 
-  // Calculer lundi et vendredi de la semaine en cours
-  const now = new Date();
-  const day = now.getDay() || 7;
-  const lundi = new Date(now);
-  lundi.setDate(now.getDate() - day + 1);
-  lundi.setHours(0, 0, 0, 0);
+  // Récupérer la semaine choisie dans le date picker
+  const pickerVal = document.getElementById('ecole-date-picker').value;
+  if (!pickerVal) { msg.style.color = '#E24B4A'; msg.textContent = 'Veuillez sélectionner une semaine.'; return; }
+
+  const lundi = new Date(pickerVal + 'T12:00:00');
   const vendredi = new Date(lundi);
   vendredi.setDate(lundi.getDate() + 4);
 
   const lundiStr = lundi.toLocaleDateString('fr-FR', {day:'2-digit', month:'2-digit', year:'numeric'});
   const vendrediStr = vendredi.toLocaleDateString('fr-FR', {day:'2-digit', month:'2-digit', year:'numeric'});
 
-  // Vérifier si un pointage école existe déjà cette semaine
   const lundiISO = lundi.getFullYear()+'-'+String(lundi.getMonth()+1).padStart(2,'0')+'-'+String(lundi.getDate()).padStart(2,'0');
-  const vendrediEnd = new Date(vendredi); vendrediEnd.setHours(23,59,59,999);
+  const vendrediISO = vendredi.getFullYear()+'-'+String(vendredi.getMonth()+1).padStart(2,'0')+'-'+String(vendredi.getDate()).padStart(2,'0');
+
+  // Vérifier si un pointage école existe déjà cette semaine (requête simple, filtre JS)
   const existing = await db.collection('pointages')
     .where('userId', '==', CU.uid)
-    .where('ecole', '==', true)
     .where('date', '>=', lundiISO)
+    .where('date', '<=', vendrediISO)
     .get();
 
-  if (!existing.empty) {
+  const alreadyEcole = existing.docs.some(d => d.data().ecole === true);
+  if (alreadyEcole) {
     msg.style.color = '#854F0B';
     msg.textContent = '✓ Semaine école déjà enregistrée pour cette semaine.';
     return;
@@ -2045,25 +2102,60 @@ window.openEdit = (docId) => {
   const entry = allPointagesData.find(e => e.id === docId);
   if (!entry) return;
   editDocId = docId;
-  document.getElementById('edit-start').value = toLocalDatetime(entry.startTime);
-  document.getElementById('edit-end').value = toLocalDatetime(entry.endTime);
+  const isEcole = entry.ecole === true;
+  document.getElementById('edit-modal-title').textContent = isEcole ? 'Modifier la semaine école' : 'Modifier le pointage';
+  document.getElementById('edit-normal-fields').style.display = isEcole ? 'none' : 'block';
+  document.getElementById('edit-ecole-fields').style.display = isEcole ? 'block' : 'none';
+  if (isEcole) {
+    document.getElementById('edit-ecole-date').value = entry.date;
+    document.getElementById('edit-ecole-hours').value = entry.duration || 35;
+  } else {
+    document.getElementById('edit-start').value = toLocalDatetime(entry.startTime);
+    document.getElementById('edit-end').value = toLocalDatetime(entry.endTime);
+  }
   document.getElementById('modal-edit').style.display = 'flex';
 };
 
 document.getElementById('modal-save').addEventListener('click', async () => {
-  const startVal = document.getElementById('edit-start').value;
-  const endVal = document.getElementById('edit-end').value;
-  if (!startVal || !endVal) { alert('Veuillez remplir les deux champs.'); return; }
-  const start = new Date(startVal), end = new Date(endVal);
-  if (end <= start) { alert('La date de départ doit être après l\'arrivée.'); return; }
-  const dur = (end - start) / 3600000;
-  try {
-    await db.collection('pointages').doc(editDocId).update({
-      startTime: start.toISOString(), endTime: end.toISOString(),
-      duration: dur, date: start.toISOString().split('T')[0]
-    });
-    closeModal();
-  } catch(e) { alert('Erreur : ' + e.message); }
+  const entry = allPointagesData.find(e => e.id === editDocId);
+  const isEcole = entry?.ecole === true;
+
+  if (isEcole) {
+    // Mode école : modifier la semaine et le nombre d'heures
+    const dateVal = document.getElementById('edit-ecole-date').value;
+    const hours = parseFloat(document.getElementById('edit-ecole-hours').value);
+    if (!dateVal) { alert('Veuillez renseigner la date.'); return; }
+    if (!hours || hours <= 0) { alert('Veuillez renseigner un nombre d\'heures valide.'); return; }
+    // Recalculer startTime (lundi 8h) et endTime selon les heures
+    const lundi = new Date(dateVal + 'T08:00:00');
+    const vendredi = new Date(dateVal);
+    vendredi.setDate(lundi.getDate() + 4);
+    vendredi.setHours(8 + Math.floor(hours / 5), (hours / 5 % 1) * 60, 0, 0);
+    try {
+      await db.collection('pointages').doc(editDocId).update({
+        date: dateVal,
+        duration: hours,
+        startTime: lundi.toISOString(),
+        endTime: vendredi.toISOString()
+      });
+      closeModal();
+    } catch(e) { alert('Erreur : ' + e.message); }
+  } else {
+    // Mode normal
+    const startVal = document.getElementById('edit-start').value;
+    const endVal = document.getElementById('edit-end').value;
+    if (!startVal || !endVal) { alert('Veuillez remplir les deux champs.'); return; }
+    const start = new Date(startVal), end = new Date(endVal);
+    if (end <= start) { alert('La date de départ doit être après l\'arrivée.'); return; }
+    const dur = (end - start) / 3600000;
+    try {
+      await db.collection('pointages').doc(editDocId).update({
+        startTime: start.toISOString(), endTime: end.toISOString(),
+        duration: dur, date: start.toISOString().split('T')[0]
+      });
+      closeModal();
+    } catch(e) { alert('Erreur : ' + e.message); }
+  }
 });
 
 window.openDelete = (docId) => {
