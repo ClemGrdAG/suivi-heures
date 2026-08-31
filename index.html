@@ -839,15 +839,11 @@ async function checkHoraires(type, time) {
   const h = time.getHours();
   const m = time.getMinutes();
   const totalMins = h * 60 + m;
-  const today = time.toISOString().split('T')[0];
   const violations = [];
 
-  // Récupérer les pointages du jour pour savoir combien de sessions il y a déjà
-  const snap = await db.collection('pointages')
-    .where('userId', '==', CU.uid)
-    .where('date', '==', today)
-    .get();
-  const sessionsToday = snap.docs.length;
+  // On utilise isBadged pour savoir si c'est le 1er badgeage (arrivée) ou un retour de pause
+  // Pas besoin de requête Firestore → évite l'index composite userId+date
+  const sessionsToday = isBadged ? 1 : 0;
 
   if (type === 'in') {
     if (sessionsToday === 0) {
@@ -1414,9 +1410,9 @@ async function renderWeek() {
   try {
     const now = new Date(), day = now.getDay()||7;
     const mon = new Date(now); mon.setDate(now.getDate()-day+1); mon.setHours(0,0,0,0);
-    const snap = await db.collection('pointages').where('userId','==',CU.uid).where('endTime','>=',mon.toISOString()).get();
+    const snap = await db.collection('pointages').where('userId','==',CU.uid).get();
     const hrs = [0,0,0,0,0];
-    snap.docs.forEach(d => { const e=d.data(), i=(new Date(e.endTime).getDay()||7)-1; if(i>=0&&i<5) hrs[i]+=e.duration; });
+    snap.docs.forEach(d => { const e=d.data(); if(new Date(e.endTime)<mon) return; const i=(new Date(e.endTime).getDay()||7)-1; if(i>=0&&i<5) hrs[i]+=e.duration; });
     const mx = Math.max(...hrs,8);
     document.getElementById('week-grid').innerHTML = DAYS.map((d,i) => {
       const h=hrs[i], p=Math.round((h/mx)*100);
@@ -1431,8 +1427,8 @@ async function renderStats() {
     const now = new Date(), day = now.getDay()||7;
     const mon = new Date(now); mon.setDate(now.getDate()-day+1); mon.setHours(0,0,0,0);
     const mStart = new Date(now.getFullYear(),now.getMonth(),1);
-    const snap = await db.collection('pointages').where('userId','==',CU.uid).where('endTime','>=',mStart.toISOString()).get();
-    const entries = snap.docs.map(d=>d.data());
+    const snap = await db.collection('pointages').where('userId','==',CU.uid).get();
+    const entries = snap.docs.map(d=>d.data()).filter(e=>new Date(e.endTime)>=mStart);
     const mH = entries.reduce((a,e)=>a+e.duration,0);
     const wH = entries.filter(e=>new Date(e.endTime)>=mon).reduce((a,e)=>a+e.duration,0);
     const days = new Set(entries.map(e=>e.date)).size;
