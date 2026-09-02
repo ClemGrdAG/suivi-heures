@@ -499,6 +499,26 @@ input:focus, select:focus { outline: none; border-color: var(--ag-gold); backgro
     </div>
   </div>
 
+  <!-- Modal paiement heures supplémentaires -->
+  <div class="modal-overlay" id="modal-paiement-hs" style="display:none">
+    <div class="modal">
+      <h3 id="modal-paiement-hs-title">Paiement heures supplémentaires</h3>
+      <p style="font-size:13px;color:#666;margin-bottom:12px;">Les heures saisies seront déduites du compteur de solde du salarié.</p>
+      <label style="font-size:13px;color:#666;display:block;margin-bottom:4px">Nombre d'heures payées</label>
+      <input type="number" id="hs-hours-input" step="0.25" min="0.25" placeholder="ex: 3.5" style="margin-bottom:8px" />
+      <div style="font-size:12px;color:#aaa;margin-bottom:12px;" id="hs-hours-preview"></div>
+      <label style="font-size:13px;color:#666;display:block;margin-bottom:4px">Date de paiement</label>
+      <input type="date" id="hs-date-input" style="margin-bottom:10px;" />
+      <label style="font-size:13px;color:#666;display:block;margin-bottom:4px">Commentaire (optionnel)</label>
+      <input type="text" id="hs-comment-input" placeholder="ex: Paiement HS mai 2026" style="margin-bottom:8px;" />
+      <div class="error" id="hs-err"></div>
+      <div class="modal-actions">
+        <button class="btn-secondary" onclick="closeModal()">Annuler</button>
+        <button class="btn-primary" id="hs-save" style="background:#E24B4A;">Déduire du compteur</button>
+      </div>
+    </div>
+  </div>
+
   <!-- Modal solde initial -->
   <div class="modal-overlay" id="modal-solde" style="display:none">
     <div class="modal">
@@ -626,6 +646,7 @@ function closeModal() {
   document.getElementById('modal-solde').style.display = 'none';
   document.getElementById('modal-add-pointage').style.display = 'none';
   document.getElementById('modal-edit-email').style.display = 'none';
+  document.getElementById('modal-paiement-hs').style.display = 'none';
   if (document.getElementById('modal-contrat')) document.getElementById('modal-contrat').style.display = 'none';
   if (document.getElementById('modal-team')) document.getElementById('modal-team').style.display = 'none';
 }
@@ -1629,6 +1650,19 @@ async function renderWeeklyRecap() {
     const userSnap = await db.collection('users').doc(CU.uid).get();
     const soldeInitial = userSnap.exists ? (userSnap.data().soldeInitial || 0) : 0;
 
+    // Récupérer les paiements HS pour ce salarié
+    const paiementsSnap = await db.collection('paiements_hs')
+      .where('userId', '==', CU.uid)
+      .get();
+    let paiementsHS = 0;
+    const paiementsDetails = [];
+    paiementsSnap.docs.forEach(d => {
+      const p = d.data();
+      paiementsHS += p.hours || 0;
+      const dateFr = new Date(p.date).toLocaleDateString('fr-FR', {day:'2-digit', month:'2-digit', year:'numeric'});
+      paiementsDetails.push(dateFr + ' : −' + formatDuration(p.hours || 0) + (p.comment ? ' (' + p.comment + ')' : ''));
+    });
+
     // Récupérer TOUS les congés validés pour ajuster l'objectif hebdomadaire
     const congesSnap = await db.collection('conges')
       .where('userId', '==', CU.uid)
@@ -1655,7 +1689,7 @@ async function renderWeeklyRecap() {
     });
 
     // Calculer le solde total — objectif ajusté par contrat et CP
-    let soldeTotal = soldeInitial - recupDeduction;
+    let soldeTotal = soldeInitial - recupDeduction - paiementsHS;
     const userContrat = UP?.contrat || 'c1';
     Object.entries(weeks).forEach(([key, w]) => {
       if (key !== thisWeekKey) {
@@ -1679,9 +1713,12 @@ async function renderWeeklyRecap() {
       const nbSemaines = Object.keys(weeks).filter(k => k !== thisWeekKey).length;
       const soldeInitialStr = soldeInitial !== 0 ? ' · Init : ' + formatSolde(soldeInitial) : '';
       const recupStr = recupDeduction > 0
-        ? ' · <span id="recup-toggle" style="cursor:pointer;text-decoration:underline dotted;color:#7F77DD;" title="Cliquez pour voir le détail">Récup utilisées : ' + formatDuration(recupDeduction) + '</span>'
+        ? ' · <span id="recup-toggle" style="cursor:pointer;text-decoration:underline dotted;color:#7F77DD;" title="Cliquez pour voir le détail">Récup : −' + formatDuration(recupDeduction) + '</span>'
         : '';
-      soldeDetail.innerHTML = 'Depuis le 13/04/2025 · ' + nbSemaines + ' semaine' + (nbSemaines > 1 ? 's' : '') + soldeInitialStr + recupStr;
+      const paiementsStr = paiementsHS > 0
+        ? ' · <span id="paiements-toggle" style="cursor:pointer;text-decoration:underline dotted;color:#A32D2D;" title="Cliquez pour voir le détail">HS payées : −' + formatDuration(paiementsHS) + '</span>'
+        : '';
+      soldeDetail.innerHTML = 'Depuis le 13/04/2025 · ' + nbSemaines + ' semaine' + (nbSemaines > 1 ? 's' : '') + soldeInitialStr + recupStr + paiementsStr;
 
       // Ajouter/supprimer le détail des récups au clic
       const recupToggle = document.getElementById('recup-toggle');
@@ -1695,6 +1732,20 @@ async function renderWeeklyRecap() {
           div.id = 'recup-detail';
           div.style.cssText = 'margin-top:8px;background:#EEEDFE;border-radius:8px;padding:8px 12px;font-size:11px;color:#534AB7;line-height:1.8;text-align:left;';
           div.innerHTML = recupDetails.map(r => '• ' + r).join('<br>');
+          soldeDetail.parentNode.insertBefore(div, soldeDetail.nextSibling);
+        });
+      }
+      const paiementsToggle = document.getElementById('paiements-toggle');
+      const paiementsDetailEl = document.getElementById('paiements-detail');
+      if (paiementsDetailEl) paiementsDetailEl.remove();
+      if (paiementsToggle && paiementsDetails.length) {
+        paiementsToggle.addEventListener('click', () => {
+          const existing = document.getElementById('paiements-detail');
+          if (existing) { existing.remove(); return; }
+          const div = document.createElement('div');
+          div.id = 'paiements-detail';
+          div.style.cssText = 'margin-top:8px;background:#FDEAEA;border-radius:8px;padding:8px 12px;font-size:11px;color:#A32D2D;line-height:1.8;text-align:left;';
+          div.innerHTML = '<b>Paiements HS</b><br>' + paiementsDetails.map(r => '• ' + r).join('<br>');
           soldeDetail.parentNode.insertBefore(div, soldeDetail.nextSibling);
         });
       }
@@ -1890,6 +1941,15 @@ async function computeAllSoldes() {
       if (si !== 0 && !employeesSolde[uid]) employeesSolde[uid] = si;
     });
 
+    // Déduire les paiements HS de chaque salarié
+    const paiementsHSSnap = await db.collection('paiements_hs').get();
+    paiementsHSSnap.docs.forEach(d => {
+      const p = d.data();
+      if (!p.userId) return;
+      if (!employeesSolde[p.userId]) employeesSolde[p.userId] = soldesInitiaux[p.userId] || 0;
+      employeesSolde[p.userId] -= (p.hours || 0);
+    });
+
     // Récupérer TOUS les congés validés pour ajuster les objectifs
     const allCongesSnap = await db.collection('conges')
       .where('status', '==', 'approved')
@@ -1963,6 +2023,7 @@ function listenEmployees() {
             <button class="btn-sm btn-edit admin-contrat-btn" data-uid="${u.id}" data-name="${u.name||''}" data-contrat="${u.contrat||'c1'}">Contrat</button>
             <button class="btn-sm btn-edit" onclick="openTeamModal('${u.id}', '${u.name||''}', '${u.team||'sedentaire'}')">${u.team==='itinerant'?'🚗 Itinérant':'🏢 Sédentaire'}</button>
             <button class="btn-sm btn-edit" onclick="openSoldeModal('${u.id}', '${u.name||''}', ${u.soldeInitial||0})">Solde</button>
+            <button class="btn-sm" style="background:#FDEAEA;color:#A32D2D;" onclick="openPaiementHSModal('${u.id}', '${u.name||''}')">💶 Payer HS</button>
             <button class="btn-sm btn-edit" onclick="openEditEmailModal('${u.id}', '${u.email||''}', '${u.name||''}')">Email</button>
             <button class="btn-sm btn-edit" onclick="sendResetPassword('${u.email||''}', '${u.name||''}')">MDP</button>
             <span class="sbadge ${isActive?'s-present':'s-disabled'}">${isActive?'Actif':'Désactivé'}</span>
@@ -2681,6 +2742,58 @@ document.getElementById('add-pointage-save').addEventListener('click', async () 
     closeModal();
     allPointagesData = []; // Force refresh
   } catch(e) { errEl.textContent = 'Erreur : ' + e.message; }
+});
+
+
+// =============================================
+// PAIEMENT HEURES SUPPLÉMENTAIRES (Admin)
+// =============================================
+let currentHSUid = null;
+
+window.openPaiementHSModal = (uid, name) => {
+  currentHSUid = uid;
+  document.getElementById('modal-paiement-hs-title').textContent = 'Paiement HS — ' + name;
+  document.getElementById('hs-hours-input').value = '';
+  document.getElementById('hs-hours-preview').textContent = '';
+  document.getElementById('hs-date-input').value = new Date().toISOString().split('T')[0];
+  document.getElementById('hs-comment-input').value = '';
+  document.getElementById('hs-err').textContent = '';
+  document.getElementById('modal-paiement-hs').style.display = 'flex';
+};
+
+document.getElementById('hs-hours-input').addEventListener('input', () => {
+  const val = parseFloat(document.getElementById('hs-hours-input').value) || 0;
+  document.getElementById('hs-hours-preview').textContent = val > 0 ? '−' + formatDuration(val) + ' seront déduits du compteur' : '';
+});
+
+document.getElementById('hs-save').addEventListener('click', async () => {
+  const hours = parseFloat(document.getElementById('hs-hours-input').value);
+  const date = document.getElementById('hs-date-input').value;
+  const comment = document.getElementById('hs-comment-input').value.trim();
+  const errEl = document.getElementById('hs-err');
+  errEl.textContent = '';
+
+  if (!hours || hours <= 0) { errEl.textContent = 'Veuillez saisir un nombre d\'heures valide.'; return; }
+  if (!date) { errEl.textContent = 'Veuillez saisir une date.'; return; }
+
+  const dateFr = new Date(date).toLocaleDateString('fr-FR', {day:'2-digit', month:'long', year:'numeric'});
+  if (!confirm('Déduire ' + formatDuration(hours) + ' du compteur de ' + document.getElementById('modal-paiement-hs-title').textContent.replace('Paiement HS — ','') + ' ?')) return;
+
+  try {
+    // Enregistrer dans la collection paiements_hs pour traçabilité
+    await db.collection('paiements_hs').add({
+      userId: currentHSUid,
+      hours,
+      date,
+      comment: comment || 'Paiement HS du ' + dateFr,
+      createdAt: new Date().toISOString(),
+      createdBy: CU.email
+    });
+    closeModal();
+    alert('✓ ' + formatDuration(hours) + ' déduits du compteur avec succès.');
+  } catch(e) {
+    errEl.textContent = 'Erreur : ' + e.message;
+  }
 });
 
 // =============================================
