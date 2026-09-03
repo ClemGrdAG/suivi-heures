@@ -740,7 +740,7 @@ document.getElementById('r-btn').addEventListener('click', async () => {
 });
 
 document.getElementById('u-logout').addEventListener('click', async () => {
-  [unsubHist, unsubTeam, unsubAllPointages, unsubEmployees, unsubMyConges, unsubAllConges, unsubPaiementsHS].forEach(u => u && u());
+  [unsubHist, unsubTeam, unsubAllPointages, unsubEmployees, unsubMyConges, unsubAllConges, unsubPaiementsHS, unsubPaiementsHSAdmin].forEach(u => u && u());
   clearInterval(timerInt);
   isBadged = false; badgeTime = null;
   await auth.signOut();
@@ -771,6 +771,7 @@ auth.onAuthStateChanged(async user => {
       });
       listenAllPointages();
       listenEmployees();
+      listenPaiementsHSAdmin();
       updateAdminStats();
       setTimeout(setDefaultAdminTab, 100);
       // Event delegation pour boutons contrat dans la liste employés
@@ -1373,6 +1374,7 @@ function listenTeam() {
       // Admin : croiser users + badges + solde pour afficher tout le monde
       unsubTeam = db.collection('badges').onSnapshot(async snap => {
         const el = document.getElementById('team-list');
+        el.innerHTML = '<div class="loader">Calcul des soldes...</div>';
         const badgesMap = {};
         snap.docs.forEach(d => { badgesMap[d.id] = d.data(); });
 
@@ -1380,7 +1382,7 @@ function listenTeam() {
         const usersSnap = await db.collection('users').where('active', '==', true).get();
         if (usersSnap.empty) { el.innerHTML = '<div class="empty-state">Aucun membre enregistré</div>'; return; }
 
-        // Recalculer les soldes à chaque mise à jour
+        // Recalculer les soldes à chaque mise à jour (attendre la fin)
         await computeAllSoldes();
 
         const members = usersSnap.docs.map(d => {
@@ -2024,6 +2026,15 @@ async function computeAllSoldes() {
     });
 
   } catch(e) { console.error(e); }
+}
+
+// Listener temps réel sur paiements_hs côté admin
+let unsubPaiementsHSAdmin = null;
+function listenPaiementsHSAdmin() {
+  if (unsubPaiementsHSAdmin) unsubPaiementsHSAdmin();
+  unsubPaiementsHSAdmin = db.collection('paiements_hs').onSnapshot(async () => {
+    await computeAllSoldes();
+  }, err => console.error('paiements_hs admin listener:', err));
 }
 
 function listenEmployees() {
@@ -2969,8 +2980,6 @@ document.getElementById('hs-save').addEventListener('click', async () => {
     });
     closeModal();
     await computeAllSoldes();
-    // Rafraîchir la vue équipe si on y est
-    listenTeam();
     alert('✓ ' + formatDuration(hours) + ' déduits du compteur avec succès.');
   } catch(e) {
     errEl.textContent = 'Erreur : ' + e.message;
