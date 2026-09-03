@@ -1971,15 +1971,6 @@ async function computeAllSoldes() {
       if (si !== 0 && !employeesSolde[uid]) employeesSolde[uid] = si;
     });
 
-    // Déduire les paiements HS de chaque salarié
-    const paiementsHSSnap = await db.collection('paiements_hs').get();
-    paiementsHSSnap.docs.forEach(d => {
-      const p = d.data();
-      if (!p.userId) return;
-      if (!employeesSolde[p.userId]) employeesSolde[p.userId] = soldesInitiaux[p.userId] || 0;
-      employeesSolde[p.userId] -= (p.hours || 0);
-    });
-
     // Récupérer TOUS les congés validés pour ajuster les objectifs
     const allCongesSnap = await db.collection('conges')
       .where('status', '==', 'approved')
@@ -2021,6 +2012,15 @@ async function computeAllSoldes() {
       if (!c.userId || c.type !== 'rtt') return;
       if (!employeesSolde[c.userId]) employeesSolde[c.userId] = soldesInitiaux[c.userId] || 0;
       employeesSolde[c.userId] -= (c.hoursImpact || 0);
+    });
+
+    // Déduire les paiements HS (en dernier, après tous les autres calculs)
+    const paiementsHSSnap = await db.collection('paiements_hs').get();
+    paiementsHSSnap.docs.forEach(d => {
+      const p = d.data();
+      if (!p.userId) return;
+      if (employeesSolde[p.userId] === undefined) employeesSolde[p.userId] = soldesInitiaux[p.userId] || 0;
+      employeesSolde[p.userId] -= (p.hours || 0);
     });
 
   } catch(e) { console.error(e); }
