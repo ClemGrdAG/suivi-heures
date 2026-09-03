@@ -387,6 +387,22 @@ input:focus, select:focus { outline: none; border-color: var(--ag-gold); backgro
       </div>
     </div>
 
+    <!-- Admin : Historique HS payées -->
+    <div id="tab-admin-hs" class="tab">
+      <div class="card">
+        <div class="card-header">
+          <div class="card-title">Historique des heures supplémentaires payées</div>
+          <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;">
+            <select id="hs-filter-user" style="margin-bottom:0;font-size:12px;padding:6px 10px;">
+              <option value="">Tous les salariés</option>
+            </select>
+            <button id="btn-export-hs-csv" class="btn-csv">⬇ Export CSV</button>
+          </div>
+        </div>
+        <div id="all-hs-paiements"><div class="loader">Chargement...</div></div>
+      </div>
+    </div>
+
   </div>
 
   <!-- Modal édition pointage -->
@@ -787,8 +803,10 @@ function addAdminTabs() {
   t2.className = 'nav-btn admin-tab'; t2.dataset.tab = 'admin-employees'; t2.textContent = '👥 Employés';
   const t3 = document.createElement('button');
   t3.className = 'nav-btn admin-tab'; t3.dataset.tab = 'admin-conges'; t3.id = 'tab-btn-admin-conges'; t3.textContent = '🗓 Congés';
-  nav.appendChild(t1); nav.appendChild(t2); nav.appendChild(t3);
-  [t1, t2, t3].forEach(btn => btn.addEventListener('click', () => switchTab(btn)));
+  const t4 = document.createElement('button');
+  t4.className = 'nav-btn admin-tab'; t4.dataset.tab = 'admin-hs'; t4.textContent = '💶 HS payées';
+  nav.appendChild(t1); nav.appendChild(t2); nav.appendChild(t3); nav.appendChild(t4);
+  [t1, t2, t3, t4].forEach(btn => btn.addEventListener('click', () => switchTab(btn)));
 }
 
 // =============================================
@@ -2443,6 +2461,154 @@ document.getElementById('export-csv').addEventListener('click', async () => {
   }
 });
 
+
+// =============================================
+// HISTORIQUE HS PAYÉES (Admin)
+// =============================================
+let allHSData = [];
+
+async function loadAllHSPaiements() {
+  const el = document.getElementById('all-hs-paiements');
+  el.innerHTML = '<div class="loader">Chargement...</div>';
+
+  try {
+    // Charger tous les paiements HS
+    const snap = await db.collection('paiements_hs').get();
+    allHSData = snap.docs.map(d => ({ id: d.id, ...d.data() }))
+      .sort((a,b) => (b.date || '').localeCompare(a.date || ''));
+
+    // Charger tous les utilisateurs pour afficher les noms
+    const usersSnap = await db.collection('users').get();
+    const usersMap = {};
+    usersSnap.docs.forEach(d => { usersMap[d.id] = d.data().name || d.data().email || 'Inconnu'; });
+
+    // Remplir le filtre par salarié
+    const filterSel = document.getElementById('hs-filter-user');
+    const currentFilter = filterSel.value;
+    filterSel.innerHTML = '<option value="">Tous les salariés</option>';
+    const usersWithHS = [...new Set(allHSData.map(p => p.userId))];
+    usersWithHS.forEach(uid => {
+      const opt = document.createElement('option');
+      opt.value = uid;
+      opt.textContent = usersMap[uid] || uid;
+      filterSel.appendChild(opt);
+    });
+    filterSel.value = currentFilter;
+
+    renderHSPaiements(usersMap);
+  } catch(e) {
+    el.innerHTML = '<div class="empty-state" style="color:#E24B4A">Erreur : ' + e.message + '</div>';
+  }
+}
+
+function renderHSPaiements(usersMap) {
+  const el = document.getElementById('all-hs-paiements');
+  const filterUid = document.getElementById('hs-filter-user').value;
+
+  let filtered = allHSData;
+  if (filterUid) filtered = filtered.filter(p => p.userId === filterUid);
+
+  if (!filtered.length) {
+    el.innerHTML = '<div class="empty-state">Aucun paiement HS enregistré</div>';
+    return;
+  }
+
+  // Calculer le total filtré
+  const total = filtered.reduce((a, p) => a + (p.hours || 0), 0);
+
+  // Grouper par salarié
+  const byUser = {};
+  filtered.forEach(p => {
+    const name = (usersMap && usersMap[p.userId]) || p.userId || 'Inconnu';
+    if (!byUser[name]) byUser[name] = { total: 0, paiements: [] };
+    byUser[name].total += p.hours || 0;
+    byUser[name].paiements.push(p);
+  });
+
+  let html = '<div style="background:#FDEAEA;border-radius:10px;padding:10px 14px;margin-bottom:12px;display:flex;justify-content:space-between;align-items:center;">' +
+    '<span style="font-size:12px;color:#A32D2D;font-weight:600;">Total HS payées</span>' +
+    '<span style="font-size:16px;font-weight:700;color:#A32D2D;">−' + formatDuration(total) + '</span>' +
+    '</div>';
+
+  Object.entries(byUser).sort((a,b) => a[0].localeCompare(b[0])).forEach(([name, data]) => {
+    html += '<div style="margin-bottom:16px;">' +
+      '<div style="display:flex;justify-content:space-between;align-items:center;padding:8px 0;border-bottom:2px solid #f0f0f0;margin-bottom:4px;">' +
+      '<span style="font-size:14px;font-weight:600;color:#222;">' + name + '</span>' +
+      '<span style="font-size:13px;font-weight:700;color:#A32D2D;background:#FDEAEA;padding:2px 10px;border-radius:8px;">−' + formatDuration(data.total) + '</span>' +
+      '</div>';
+
+    data.paiements.forEach(p => {
+      const dateFr = p.date ? new Date(p.date).toLocaleDateString('fr-FR', {weekday:'long', day:'2-digit', month:'long', year:'numeric'}) : '—';
+      const createdFr = p.createdAt ? new Date(p.createdAt).toLocaleDateString('fr-FR', {day:'2-digit', month:'2-digit', year:'2-digit'}) : '';
+      html += '<div style="display:flex;justify-content:space-between;align-items:center;padding:8px 0 8px 12px;border-bottom:1px solid #f5f5f5;">' +
+        '<div>' +
+        '<div style="font-size:13px;font-weight:500;color:#333;">' + dateFr + '</div>' +
+        '<div style="font-size:11px;color:#aaa;margin-top:2px;">' +
+          (p.comment || '—') +
+          (createdFr ? ' · Saisi le ' + createdFr + ' par ' + (p.createdBy || 'admin') : '') +
+        '</div>' +
+        '</div>' +
+        '<div style="display:flex;align-items:center;gap:8px;">' +
+        '<span style="font-size:13px;font-weight:700;color:#A32D2D;">−' + formatDuration(p.hours || 0) + '</span>' +
+        '<button class="btn-sm btn-danger" onclick="deleteHSPaiement('' + p.id + '')">Suppr.</button>' +
+        '</div>' +
+        '</div>';
+    });
+    html += '</div>';
+  });
+
+  el.innerHTML = html;
+}
+
+window.deleteHSPaiement = async (id) => {
+  if (!confirm('Supprimer ce paiement HS ? Le solde du salarié sera recalculé.')) return;
+  try {
+    await db.collection('paiements_hs').doc(id).delete();
+    await loadAllHSPaiements();
+    await computeAllSoldes();
+  } catch(e) { alert('Erreur : ' + e.message); }
+};
+
+// Export CSV des paiements HS
+document.getElementById('btn-export-hs-csv').addEventListener('click', () => {
+  if (!allHSData.length) { alert('Aucune donnée à exporter.'); return; }
+  const filterUid = document.getElementById('hs-filter-user').value;
+  let filtered = filterUid ? allHSData.filter(p => p.userId === filterUid) : allHSData;
+
+  const rows = [['Salarié', 'Date paiement', 'Heures payées', 'Commentaire', 'Saisi le', 'Par']];
+  filtered.forEach(p => {
+    const sel = document.getElementById('hs-filter-user');
+    const opt = [...sel.options].find(o => o.value === p.userId);
+    const name = opt ? opt.textContent : p.userId;
+    rows.push([
+      '"' + name + '"',
+      '"' + (p.date ? new Date(p.date).toLocaleDateString('fr-FR') : '') + '"',
+      '"' + formatDuration(p.hours || 0) + '"',
+      '"' + (p.comment || '') + '"',
+      '"' + (p.createdAt ? new Date(p.createdAt).toLocaleDateString('fr-FR') : '') + '"',
+      '"' + (p.createdBy || '') + '"'
+    ]);
+  });
+  const csv = rows.map(r => r.join(';')).join('\n');
+  const blob = new Blob(['\uFEFF' + csv], { type: 'text/csv;charset=utf-8' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = 'paiements_hs_' + new Date().toISOString().split('T')[0] + '.csv';
+  a.click();
+  URL.revokeObjectURL(url);
+});
+
+// Filtre par salarié
+document.getElementById('hs-filter-user').addEventListener('change', () => {
+  // Reconstruire usersMap depuis les options du select
+  const usersMap = {};
+  [...document.getElementById('hs-filter-user').options].forEach(o => {
+    if (o.value) usersMap[o.value] = o.textContent;
+  });
+  renderHSPaiements(usersMap);
+});
+
 // =============================================
 // CONGÉS
 // =============================================
@@ -3140,6 +3306,7 @@ function switchTab(btn) {
   if (btn.dataset.tab === 'history' && !isAdmin) initExportDates();
   if (btn.dataset.tab === 'conges') listenMyConges();
   if (btn.dataset.tab === 'admin-conges') listenAllConges();
+  if (btn.dataset.tab === 'admin-hs') loadAllHSPaiements();
 }
 
 function setDefaultAdminTab() {
