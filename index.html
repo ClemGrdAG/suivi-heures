@@ -740,7 +740,7 @@ document.getElementById('r-btn').addEventListener('click', async () => {
 });
 
 document.getElementById('u-logout').addEventListener('click', async () => {
-  [unsubHist, unsubTeam, unsubAllPointages, unsubEmployees, unsubMyConges, unsubAllConges].forEach(u => u && u());
+  [unsubHist, unsubTeam, unsubAllPointages, unsubEmployees, unsubMyConges, unsubAllConges, unsubPaiementsHS].forEach(u => u && u());
   clearInterval(timerInt);
   isBadged = false; badgeTime = null;
   await auth.signOut();
@@ -759,6 +759,7 @@ auth.onAuthStateChanged(async user => {
     if (!isAdmin) {
       await checkBadge();
       listenHistory();
+      listenPaiementsHS();
       renderWeek();
       renderStats();
       addCongesTabToNav();
@@ -1196,6 +1197,17 @@ document.getElementById('btn-ecole').addEventListener('click', async () => {
 // =============================================
 // HISTORIQUE
 // =============================================
+// Listener temps réel sur paiements_hs — met à jour le solde salarié automatiquement
+let unsubPaiementsHS = null;
+function listenPaiementsHS() {
+  if (unsubPaiementsHS) unsubPaiementsHS();
+  unsubPaiementsHS = db.collection('paiements_hs')
+    .where('userId', '==', CU.uid)
+    .onSnapshot(() => {
+      renderWeeklyRecap();
+    }, err => console.error('paiements_hs listener:', err));
+}
+
 function listenHistory() {
   if (unsubHist) unsubHist();
   const el = document.getElementById('hist-list');
@@ -1368,8 +1380,8 @@ function listenTeam() {
         const usersSnap = await db.collection('users').where('active', '==', true).get();
         if (usersSnap.empty) { el.innerHTML = '<div class="empty-state">Aucun membre enregistré</div>'; return; }
 
-        // S'assurer que les soldes sont à jour
-        if (!Object.keys(employeesSolde).length) await computeAllSoldes();
+        // Recalculer les soldes à chaque mise à jour
+        await computeAllSoldes();
 
         const members = usersSnap.docs.map(d => {
           const user = d.data();
@@ -2956,6 +2968,9 @@ document.getElementById('hs-save').addEventListener('click', async () => {
       createdBy: CU.email
     });
     closeModal();
+    await computeAllSoldes();
+    // Rafraîchir la vue équipe si on y est
+    listenTeam();
     alert('✓ ' + formatDuration(hours) + ' déduits du compteur avec succès.');
   } catch(e) {
     errEl.textContent = 'Erreur : ' + e.message;
