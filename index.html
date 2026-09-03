@@ -740,7 +740,7 @@ document.getElementById('r-btn').addEventListener('click', async () => {
 });
 
 document.getElementById('u-logout').addEventListener('click', async () => {
-  [unsubHist, unsubTeam, unsubAllPointages, unsubEmployees, unsubMyConges, unsubAllConges, unsubPaiementsHS, unsubPaiementsHSAdmin].forEach(u => u && u());
+  [unsubHist, unsubTeam, unsubAllPointages, unsubEmployees, unsubMyConges, unsubAllConges, unsubPaiementsHS].forEach(u => u && u());
   clearInterval(timerInt);
   isBadged = false; badgeTime = null;
   await auth.signOut();
@@ -771,7 +771,6 @@ auth.onAuthStateChanged(async user => {
       });
       listenAllPointages();
       listenEmployees();
-      listenPaiementsHSAdmin();
       updateAdminStats();
       setTimeout(setDefaultAdminTab, 100);
       // Event delegation pour boutons contrat dans la liste employés
@@ -2026,15 +2025,6 @@ async function computeAllSoldes() {
     });
 
   } catch(e) { console.error(e); }
-}
-
-// Listener temps réel sur paiements_hs côté admin
-let unsubPaiementsHSAdmin = null;
-function listenPaiementsHSAdmin() {
-  if (unsubPaiementsHSAdmin) unsubPaiementsHSAdmin();
-  unsubPaiementsHSAdmin = db.collection('paiements_hs').onSnapshot(async () => {
-    await computeAllSoldes();
-  }, err => console.error('paiements_hs admin listener:', err));
 }
 
 function listenEmployees() {
