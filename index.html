@@ -1923,7 +1923,15 @@ async function updateAdminStats() {
 let employeesSolde = {};
 let employeesSoldeLastUpdate = 0; // timestamp du dernier calcul
 
+let _computeRunning = false;
+let _computePending = false;
 async function computeAllSoldes() {
+  if (_computeRunning) {
+    _computePending = true;
+    return;
+  }
+  _computeRunning = true;
+  _computePending = false;
   const now = new Date();
   const day = now.getDay() || 7;
   const thisMon = new Date(now);
@@ -2035,6 +2043,8 @@ async function computeAllSoldes() {
     employeesSoldeLastUpdate = Date.now();
 
   } catch(e) { console.error(e); }
+  _computeRunning = false;
+  if (_computePending) await computeAllSoldes();
 }
 
 function listenEmployees() {
