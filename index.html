@@ -1373,20 +1373,24 @@ function listenTeam() {
   try {
     if (isAdmin) {
       // Admin : croiser users + badges + solde pour afficher tout le monde
-      unsubTeam = db.collection('badges').onSnapshot(async snap => {
+      unsubTeam = db.collection('users').onSnapshot(async usersSnap => {
         const el = document.getElementById('team-list');
         el.innerHTML = '<div class="loader">Calcul des soldes...</div>';
-        const badgesMap = {};
-        snap.docs.forEach(d => { badgesMap[d.id] = d.data(); });
 
-        // Récupérer tous les utilisateurs actifs
-        const usersSnap = await db.collection('users').where('active', '==', true).get();
+        // Récupérer les badges en temps réel
+        const badgesSnap = await db.collection('badges').get();
+        const badgesMap = {};
+        badgesSnap.docs.forEach(d => { badgesMap[d.id] = d.data(); });
+
         if (usersSnap.empty) { el.innerHTML = '<div class="empty-state">Aucun membre enregistré</div>'; return; }
 
-        // Toujours recalculer les soldes pour garantir la cohérence
+        // Recalculer les soldes (même source que listenEmployees)
         await computeAllSoldes();
 
-        const members = usersSnap.docs.map(d => {
+        const snap = { docs: usersSnap.docs.filter(d => d.data().active !== false) };
+        if (!snap.docs.length) { el.innerHTML = '<div class="empty-state">Aucun membre enregistré</div>'; return; }
+
+        const members = snap.docs.map(d => {
           const user = d.data();
           const badge = badgesMap[d.id] || {};
           return {
@@ -1434,7 +1438,7 @@ function listenTeam() {
         const usersSnap = await db.collection('users').where('active', '==', true).get();
         if (usersSnap.empty) { el.innerHTML = "<div class='empty-state'>Aucun collègue enregistré</div>"; return; }
 
-        const members = usersSnap.docs.map(d => {
+        const members = snap.docs.map(d => {
           const user = d.data();
           const badge = badgesMap[d.id] || {};
           return {
