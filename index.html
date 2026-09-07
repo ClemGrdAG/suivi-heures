@@ -1383,6 +1383,7 @@ function listenTeam() {
         const usersSnap = await db.collection('users').where('active', '==', true).get();
         if (usersSnap.empty) { el.innerHTML = '<div class="empty-state">Aucun membre enregistré</div>'; return; }
 
+        employeesSolde = {};
         await computeAllSoldes();
 
         const members = usersSnap.docs.map(d => {
