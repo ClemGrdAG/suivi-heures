@@ -2976,8 +2976,6 @@ document.getElementById('hs-save').addEventListener('click', async () => {
     employeesSolde = {};
     employeesSoldeLastUpdate = 0;
     await computeAllSoldes();
-    // Forcer refresh vue Équipe
-    listenTeam();
     alert('✓ ' + formatDuration(hours) + ' déduits du compteur avec succès.');
   } catch(e) {
     errEl.textContent = 'Erreur : ' + e.message;
