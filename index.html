@@ -387,22 +387,6 @@ input:focus, select:focus { outline: none; border-color: var(--ag-gold); backgro
       </div>
     </div>
 
-    <!-- Admin : Historique HS payées -->
-    <div id="tab-admin-hs" class="tab">
-      <div class="card">
-        <div class="card-header">
-          <div class="card-title">Historique des heures supplémentaires payées</div>
-          <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;">
-            <select id="hs-filter-user" style="margin-bottom:0;font-size:12px;padding:6px 10px;">
-              <option value="">Tous les salariés</option>
-            </select>
-            <button id="btn-export-hs-csv" class="btn-csv">⬇ Export CSV</button>
-          </div>
-        </div>
-        <div id="all-hs-paiements"><div class="loader">Chargement...</div></div>
-      </div>
-    </div>
-
   </div>
 
   <!-- Modal édition pointage -->
@@ -511,26 +495,6 @@ input:focus, select:focus { outline: none; border-color: var(--ag-gold); backgro
       <div class="modal-actions">
         <button class="btn-secondary" onclick="closeModal()">Annuler</button>
         <button class="btn-primary" id="contrat-save">Enregistrer</button>
-      </div>
-    </div>
-  </div>
-
-  <!-- Modal paiement heures supplémentaires -->
-  <div class="modal-overlay" id="modal-paiement-hs" style="display:none">
-    <div class="modal">
-      <h3 id="modal-paiement-hs-title">Paiement heures supplémentaires</h3>
-      <p style="font-size:13px;color:#666;margin-bottom:12px;">Les heures saisies seront déduites du compteur de solde du salarié.</p>
-      <label style="font-size:13px;color:#666;display:block;margin-bottom:4px">Nombre d'heures payées</label>
-      <input type="number" id="hs-hours-input" step="0.25" min="0.25" placeholder="ex: 3.5" style="margin-bottom:8px" />
-      <div style="font-size:12px;color:#aaa;margin-bottom:12px;" id="hs-hours-preview"></div>
-      <label style="font-size:13px;color:#666;display:block;margin-bottom:4px">Date de paiement</label>
-      <input type="date" id="hs-date-input" style="margin-bottom:10px;" />
-      <label style="font-size:13px;color:#666;display:block;margin-bottom:4px">Commentaire (optionnel)</label>
-      <input type="text" id="hs-comment-input" placeholder="ex: Paiement HS mai 2026" style="margin-bottom:8px;" />
-      <div class="error" id="hs-err"></div>
-      <div class="modal-actions">
-        <button class="btn-secondary" onclick="closeModal()">Annuler</button>
-        <button class="btn-primary" id="hs-save" style="background:#E24B4A;">Déduire du compteur</button>
       </div>
     </div>
   </div>
@@ -664,7 +628,6 @@ function closeModal() {
   document.getElementById('modal-solde').style.display = 'none';
   document.getElementById('modal-add-pointage').style.display = 'none';
   document.getElementById('modal-edit-email').style.display = 'none';
-  document.getElementById('modal-paiement-hs').style.display = 'none';
   if (document.getElementById('modal-contrat')) document.getElementById('modal-contrat').style.display = 'none';
   if (document.getElementById('modal-team')) document.getElementById('modal-team').style.display = 'none';
 }
@@ -742,7 +705,7 @@ document.getElementById('r-btn').addEventListener('click', async () => {
 });
 
 document.getElementById('u-logout').addEventListener('click', async () => {
-  [unsubHist, unsubTeam, unsubAllPointages, unsubEmployees, unsubMyConges, unsubAllConges, unsubPaiementsHS].forEach(u => u && u());
+  [unsubHist, unsubTeam, unsubAllPointages, unsubEmployees, unsubMyConges, unsubAllConges].forEach(u => u && u());
   clearInterval(timerInt);
   isBadged = false; badgeTime = null;
   await auth.signOut();
@@ -761,7 +724,6 @@ auth.onAuthStateChanged(async user => {
     if (!isAdmin) {
       await checkBadge();
       listenHistory();
-      listenPaiementsHS();
       renderWeek();
       renderStats();
       addCongesTabToNav();
@@ -806,10 +768,8 @@ function addAdminTabs() {
   t2.className = 'nav-btn admin-tab'; t2.dataset.tab = 'admin-employees'; t2.textContent = '👥 Employés';
   const t3 = document.createElement('button');
   t3.className = 'nav-btn admin-tab'; t3.dataset.tab = 'admin-conges'; t3.id = 'tab-btn-admin-conges'; t3.textContent = '🗓 Congés';
-  const t4 = document.createElement('button');
-  t4.className = 'nav-btn admin-tab'; t4.dataset.tab = 'admin-hs'; t4.textContent = '💶 HS payées';
-  nav.appendChild(t1); nav.appendChild(t2); nav.appendChild(t3); nav.appendChild(t4);
-  [t1, t2, t3, t4].forEach(btn => btn.addEventListener('click', () => switchTab(btn)));
+  nav.appendChild(t1); nav.appendChild(t2); nav.appendChild(t3);
+  [t1, t2, t3].forEach(btn => btn.addEventListener('click', () => switchTab(btn)));
 }
 
 // =============================================
@@ -1199,16 +1159,6 @@ document.getElementById('btn-ecole').addEventListener('click', async () => {
 // =============================================
 // HISTORIQUE
 // =============================================
-// Listener temps réel sur paiements_hs — met à jour le solde salarié automatiquement
-let unsubPaiementsHS = null;
-function listenPaiementsHS() {
-  if (unsubPaiementsHS) unsubPaiementsHS();
-  unsubPaiementsHS = db.collection('paiements_hs')
-    .where('userId', '==', CU.uid)
-    .onSnapshot(() => {
-      renderWeeklyRecap();
-    }, err => console.error('paiements_hs listener:', err));
-}
 
 function listenHistory() {
   if (unsubHist) unsubHist();
@@ -1388,9 +1338,7 @@ function listenTeam() {
 
         // Attendre que employeesSolde soit calculé (par listenEmployees)
         // Si vide, lancer le calcul
-        if (Object.keys(employeesSolde).length === 0) {
-          await computeAllSoldes();
-        }
+        await computeAllSoldes();
 
         const members = usersSnap.docs.map(d => {
           const user = d.data();
@@ -1693,19 +1641,6 @@ async function renderWeeklyRecap() {
     const userSnap = await db.collection('users').doc(CU.uid).get();
     const soldeInitial = userSnap.exists ? (userSnap.data().soldeInitial || 0) : 0;
 
-    // Récupérer les paiements HS pour ce salarié
-    const paiementsSnap = await db.collection('paiements_hs')
-      .where('userId', '==', CU.uid)
-      .get();
-    let paiementsHS = 0;
-    const paiementsDetails = [];
-    paiementsSnap.docs.forEach(d => {
-      const p = d.data();
-      paiementsHS += p.hours || 0;
-      const dateFr = new Date(p.date).toLocaleDateString('fr-FR', {day:'2-digit', month:'2-digit', year:'numeric'});
-      paiementsDetails.push(dateFr + ' : −' + formatDuration(p.hours || 0) + (p.comment ? ' (' + p.comment + ')' : ''));
-    });
-
     // Récupérer TOUS les congés validés pour ajuster l'objectif hebdomadaire
     const congesSnap = await db.collection('conges')
       .where('userId', '==', CU.uid)
@@ -1732,7 +1667,7 @@ async function renderWeeklyRecap() {
     });
 
     // Calculer le solde total — objectif ajusté par contrat et CP
-    let soldeTotal = soldeInitial - recupDeduction - paiementsHS;
+    let soldeTotal = soldeInitial - recupDeduction;
     const userContrat = UP?.contrat || 'c1';
     Object.entries(weeks).forEach(([key, w]) => {
       if (key !== thisWeekKey) {
@@ -1758,10 +1693,7 @@ async function renderWeeklyRecap() {
       const recupStr = recupDeduction > 0
         ? ' · <span id="recup-toggle" style="cursor:pointer;text-decoration:underline dotted;color:#7F77DD;" title="Cliquez pour voir le détail">Récup : −' + formatDuration(recupDeduction) + '</span>'
         : '';
-      const paiementsStr = paiementsHS > 0
-        ? ' · <span id="paiements-toggle" style="cursor:pointer;text-decoration:underline dotted;color:#A32D2D;" title="Cliquez pour voir le détail">HS payées : −' + formatDuration(paiementsHS) + '</span>'
-        : '';
-      soldeDetail.innerHTML = 'Depuis le ' + startDateFr + ' · ' + nbSemaines + ' semaine' + (nbSemaines > 1 ? 's' : '') + soldeInitialStr + recupStr + paiementsStr;
+      soldeDetail.innerHTML = 'Depuis le ' + startDateFr + ' · ' + nbSemaines + ' semaine' + (nbSemaines > 1 ? 's' : '') + soldeInitialStr + recupStr;
 
       // Ajouter/supprimer le détail des récups au clic
       const recupToggle = document.getElementById('recup-toggle');
@@ -2027,14 +1959,6 @@ async function computeAllSoldes() {
       employeesSolde[c.userId] -= (c.hoursImpact || 0);
     });
 
-    // Déduire les paiements HS (en dernier, après tous les autres calculs)
-    const paiementsHSSnap = await db.collection('paiements_hs').get();
-    paiementsHSSnap.docs.forEach(d => {
-      const p = d.data();
-      if (!p.userId) return;
-      if (employeesSolde[p.userId] === undefined) employeesSolde[p.userId] = soldesInitiaux[p.userId] || 0;
-      employeesSolde[p.userId] -= (p.hours || 0);
-    });
     employeesSoldeLastUpdate = Date.now();
 
   } catch(e) { console.error(e); }
@@ -2067,7 +1991,6 @@ function listenEmployees() {
             <button class="btn-sm btn-edit admin-contrat-btn" data-uid="${u.id}" data-name="${u.name||''}" data-contrat="${u.contrat||'c1'}">Contrat</button>
             <button class="btn-sm btn-edit" onclick="openTeamModal('${u.id}', '${u.name||''}', '${u.team||'sedentaire'}')">${u.team==='itinerant'?'🚗 Itinérant':'🏢 Sédentaire'}</button>
             <button class="btn-sm btn-edit" onclick="openSoldeModal('${u.id}', '${u.name||''}', ${u.soldeInitial||0})">Solde</button>
-            <button class="btn-sm" style="background:#FDEAEA;color:#A32D2D;" onclick="openPaiementHSModal('${u.id}', '${u.name||''}')">💶 Payer HS</button>
             <button class="btn-sm btn-edit" onclick="openEditEmailModal('${u.id}', '${u.email||''}', '${u.name||''}')">Email</button>
             <button class="btn-sm btn-edit" onclick="sendResetPassword('${u.email||''}', '${u.name||''}')">MDP</button>
             <span class="sbadge ${isActive?'s-present':'s-disabled'}">${isActive?'Actif':'Désactivé'}</span>
@@ -2489,153 +2412,6 @@ document.getElementById('export-csv').addEventListener('click', async () => {
 
 
 // =============================================
-// HISTORIQUE HS PAYÉES (Admin)
-// =============================================
-let allHSData = [];
-
-async function loadAllHSPaiements() {
-  const el = document.getElementById('all-hs-paiements');
-  el.innerHTML = '<div class="loader">Chargement...</div>';
-
-  try {
-    // Charger tous les paiements HS
-    const snap = await db.collection('paiements_hs').get();
-    allHSData = snap.docs.map(d => ({ id: d.id, ...d.data() }))
-      .sort((a,b) => (b.date || '').localeCompare(a.date || ''));
-
-    // Charger tous les utilisateurs pour afficher les noms
-    const usersSnap = await db.collection('users').get();
-    const usersMap = {};
-    usersSnap.docs.forEach(d => { usersMap[d.id] = d.data().name || d.data().email || 'Inconnu'; });
-
-    // Remplir le filtre par salarié
-    const filterSel = document.getElementById('hs-filter-user');
-    const currentFilter = filterSel.value;
-    filterSel.innerHTML = '<option value="">Tous les salariés</option>';
-    const usersWithHS = [...new Set(allHSData.map(p => p.userId))];
-    usersWithHS.forEach(uid => {
-      const opt = document.createElement('option');
-      opt.value = uid;
-      opt.textContent = usersMap[uid] || uid;
-      filterSel.appendChild(opt);
-    });
-    filterSel.value = currentFilter;
-
-    renderHSPaiements(usersMap);
-  } catch(e) {
-    el.innerHTML = '<div class="empty-state" style="color:#E24B4A">Erreur : ' + e.message + '</div>';
-  }
-}
-
-function renderHSPaiements(usersMap) {
-  const el = document.getElementById('all-hs-paiements');
-  const filterUid = document.getElementById('hs-filter-user').value;
-
-  let filtered = allHSData;
-  if (filterUid) filtered = filtered.filter(p => p.userId === filterUid);
-
-  if (!filtered.length) {
-    el.innerHTML = '<div class="empty-state">Aucun paiement HS enregistré</div>';
-    return;
-  }
-
-  // Calculer le total filtré
-  const total = filtered.reduce((a, p) => a + (p.hours || 0), 0);
-
-  // Grouper par salarié
-  const byUser = {};
-  filtered.forEach(p => {
-    const name = (usersMap && usersMap[p.userId]) || p.userId || 'Inconnu';
-    if (!byUser[name]) byUser[name] = { total: 0, paiements: [] };
-    byUser[name].total += p.hours || 0;
-    byUser[name].paiements.push(p);
-  });
-
-  let html = '<div style="background:#FDEAEA;border-radius:10px;padding:10px 14px;margin-bottom:12px;display:flex;justify-content:space-between;align-items:center;">' +
-    '<span style="font-size:12px;color:#A32D2D;font-weight:600;">Total HS payées</span>' +
-    '<span style="font-size:16px;font-weight:700;color:#A32D2D;">−' + formatDuration(total) + '</span>' +
-    '</div>';
-
-  Object.entries(byUser).sort((a,b) => a[0].localeCompare(b[0])).forEach(([name, data]) => {
-    html += '<div style="margin-bottom:16px;">' +
-      '<div style="display:flex;justify-content:space-between;align-items:center;padding:8px 0;border-bottom:2px solid #f0f0f0;margin-bottom:4px;">' +
-      '<span style="font-size:14px;font-weight:600;color:#222;">' + name + '</span>' +
-      '<span style="font-size:13px;font-weight:700;color:#A32D2D;background:#FDEAEA;padding:2px 10px;border-radius:8px;">−' + formatDuration(data.total) + '</span>' +
-      '</div>';
-
-    data.paiements.forEach(p => {
-      const dateFr = p.date ? new Date(p.date).toLocaleDateString('fr-FR', {weekday:'long', day:'2-digit', month:'long', year:'numeric'}) : '—';
-      const createdFr = p.createdAt ? new Date(p.createdAt).toLocaleDateString('fr-FR', {day:'2-digit', month:'2-digit', year:'2-digit'}) : '';
-      html += '<div style="display:flex;justify-content:space-between;align-items:center;padding:8px 0 8px 12px;border-bottom:1px solid #f5f5f5;">' +
-        '<div>' +
-        '<div style="font-size:13px;font-weight:500;color:#333;">' + dateFr + '</div>' +
-        '<div style="font-size:11px;color:#aaa;margin-top:2px;">' +
-          (p.comment || '—') +
-          (createdFr ? ' · Saisi le ' + createdFr + ' par ' + (p.createdBy || 'admin') : '') +
-        '</div>' +
-        '</div>' +
-        '<div style="display:flex;align-items:center;gap:8px;">' +
-        '<span style="font-size:13px;font-weight:700;color:#A32D2D;">−' + formatDuration(p.hours || 0) + '</span>' +
-        '<button class="btn-sm btn-danger" onclick="deleteHSPaiement(\''+p.id+'\')">Suppr.</button>' +
-        '</div>' +
-        '</div>';
-    });
-    html += '</div>';
-  });
-
-  el.innerHTML = html;
-}
-
-window.deleteHSPaiement = async (id) => {
-  if (!confirm('Supprimer ce paiement HS ? Le solde du salarié sera recalculé.')) return;
-  try {
-    await db.collection('paiements_hs').doc(id).delete();
-    await loadAllHSPaiements();
-    await computeAllSoldes();
-  } catch(e) { alert('Erreur : ' + e.message); }
-};
-
-// Export CSV des paiements HS
-document.getElementById('btn-export-hs-csv').addEventListener('click', () => {
-  if (!allHSData.length) { alert('Aucune donnée à exporter.'); return; }
-  const filterUid = document.getElementById('hs-filter-user').value;
-  let filtered = filterUid ? allHSData.filter(p => p.userId === filterUid) : allHSData;
-
-  const rows = [['Salarié', 'Date paiement', 'Heures payées', 'Commentaire', 'Saisi le', 'Par']];
-  filtered.forEach(p => {
-    const sel = document.getElementById('hs-filter-user');
-    const opt = [...sel.options].find(o => o.value === p.userId);
-    const name = opt ? opt.textContent : p.userId;
-    rows.push([
-      '"' + name + '"',
-      '"' + (p.date ? new Date(p.date).toLocaleDateString('fr-FR') : '') + '"',
-      '"' + formatDuration(p.hours || 0) + '"',
-      '"' + (p.comment || '') + '"',
-      '"' + (p.createdAt ? new Date(p.createdAt).toLocaleDateString('fr-FR') : '') + '"',
-      '"' + (p.createdBy || '') + '"'
-    ]);
-  });
-  const csv = rows.map(r => r.join(';')).join('\n');
-  const blob = new Blob(['\uFEFF' + csv], { type: 'text/csv;charset=utf-8' });
-  const url = URL.createObjectURL(blob);
-  const a = document.createElement('a');
-  a.href = url;
-  a.download = 'paiements_hs_' + new Date().toISOString().split('T')[0] + '.csv';
-  a.click();
-  URL.revokeObjectURL(url);
-});
-
-// Filtre par salarié
-document.getElementById('hs-filter-user').addEventListener('change', () => {
-  // Reconstruire usersMap depuis les options du select
-  const usersMap = {};
-  [...document.getElementById('hs-filter-user').options].forEach(o => {
-    if (o.value) usersMap[o.value] = o.textContent;
-  });
-  renderHSPaiements(usersMap);
-});
-
-// =============================================
 // CONGÉS
 // =============================================
 let unsubMyConges = null, unsubAllConges = null;
@@ -2936,60 +2712,6 @@ document.getElementById('add-pointage-save').addEventListener('click', async () 
   } catch(e) { errEl.textContent = 'Erreur : ' + e.message; }
 });
 
-
-// =============================================
-// PAIEMENT HEURES SUPPLÉMENTAIRES (Admin)
-// =============================================
-let currentHSUid = null;
-
-window.openPaiementHSModal = (uid, name) => {
-  currentHSUid = uid;
-  document.getElementById('modal-paiement-hs-title').textContent = 'Paiement HS — ' + name;
-  document.getElementById('hs-hours-input').value = '';
-  document.getElementById('hs-hours-preview').textContent = '';
-  document.getElementById('hs-date-input').value = new Date().toISOString().split('T')[0];
-  document.getElementById('hs-comment-input').value = '';
-  document.getElementById('hs-err').textContent = '';
-  document.getElementById('modal-paiement-hs').style.display = 'flex';
-};
-
-document.getElementById('hs-hours-input').addEventListener('input', () => {
-  const val = parseFloat(document.getElementById('hs-hours-input').value) || 0;
-  document.getElementById('hs-hours-preview').textContent = val > 0 ? '−' + formatDuration(val) + ' seront déduits du compteur' : '';
-});
-
-document.getElementById('hs-save').addEventListener('click', async () => {
-  const hours = parseFloat(document.getElementById('hs-hours-input').value);
-  const date = document.getElementById('hs-date-input').value;
-  const comment = document.getElementById('hs-comment-input').value.trim();
-  const errEl = document.getElementById('hs-err');
-  errEl.textContent = '';
-
-  if (!hours || hours <= 0) { errEl.textContent = 'Veuillez saisir un nombre d\'heures valide.'; return; }
-  if (!date) { errEl.textContent = 'Veuillez saisir une date.'; return; }
-
-  const dateFr = new Date(date).toLocaleDateString('fr-FR', {day:'2-digit', month:'long', year:'numeric'});
-  if (!confirm('Déduire ' + formatDuration(hours) + ' du compteur de ' + document.getElementById('modal-paiement-hs-title').textContent.replace('Paiement HS — ','') + ' ?')) return;
-
-  try {
-    // Enregistrer dans la collection paiements_hs pour traçabilité
-    await db.collection('paiements_hs').add({
-      userId: currentHSUid,
-      hours,
-      date,
-      comment: comment || 'Paiement HS du ' + dateFr,
-      createdAt: new Date().toISOString(),
-      createdBy: CU.email
-    });
-    closeModal();
-    employeesSolde = {};
-    employeesSoldeLastUpdate = 0;
-    await computeAllSoldes();
-    alert('✓ ' + formatDuration(hours) + ' déduits du compteur avec succès.');
-  } catch(e) {
-    errEl.textContent = 'Erreur : ' + e.message;
-  }
-});
 
 // =============================================
 // SOLDE INITIAL
@@ -3363,7 +3085,6 @@ function switchTab(btn) {
   if (btn.dataset.tab === 'history' && !isAdmin) initExportDates();
   if (btn.dataset.tab === 'conges') listenMyConges();
   if (btn.dataset.tab === 'admin-conges') listenAllConges();
-  if (btn.dataset.tab === 'admin-hs') loadAllHSPaiements();
 }
 
 function setDefaultAdminTab() {
