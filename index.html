@@ -1373,24 +1373,19 @@ function listenTeam() {
   try {
     if (isAdmin) {
       // Admin : croiser users + badges + solde pour afficher tout le monde
-      unsubTeam = db.collection('users').onSnapshot(async usersSnap => {
+      unsubTeam = db.collection('badges').onSnapshot(async snap => {
         const el = document.getElementById('team-list');
         el.innerHTML = '<div class="loader">Calcul des soldes...</div>';
-
-        // Récupérer les badges en temps réel
-        const badgesSnap = await db.collection('badges').get();
         const badgesMap = {};
-        badgesSnap.docs.forEach(d => { badgesMap[d.id] = d.data(); });
+        snap.docs.forEach(d => { badgesMap[d.id] = d.data(); });
 
+        // Récupérer tous les utilisateurs actifs
+        const usersSnap = await db.collection('users').where('active', '==', true).get();
         if (usersSnap.empty) { el.innerHTML = '<div class="empty-state">Aucun membre enregistré</div>'; return; }
 
-        // Recalculer les soldes (même source que listenEmployees)
         await computeAllSoldes();
 
-        const snap = { docs: usersSnap.docs.filter(d => d.data().active !== false) };
-        if (!snap.docs.length) { el.innerHTML = '<div class="empty-state">Aucun membre enregistré</div>'; return; }
-
-        const members = snap.docs.map(d => {
+        const members = usersSnap.docs.map(d => {
           const user = d.data();
           const badge = badgesMap[d.id] || {};
           return {
@@ -1438,7 +1433,7 @@ function listenTeam() {
         const usersSnap = await db.collection('users').where('active', '==', true).get();
         if (usersSnap.empty) { el.innerHTML = "<div class='empty-state'>Aucun collègue enregistré</div>"; return; }
 
-        const members = snap.docs.map(d => {
+        const members = usersSnap.docs.map(d => {
           const user = d.data();
           const badge = badgesMap[d.id] || {};
           return {
@@ -2978,8 +2973,11 @@ document.getElementById('hs-save').addEventListener('click', async () => {
       createdBy: CU.email
     });
     closeModal();
-    employeesSoldeLastUpdate = 0; // forcer recalcul complet
+    employeesSolde = {};
+    employeesSoldeLastUpdate = 0;
     await computeAllSoldes();
+    // Forcer refresh vue Équipe
+    listenTeam();
     alert('✓ ' + formatDuration(hours) + ' déduits du compteur avec succès.');
   } catch(e) {
     errEl.textContent = 'Erreur : ' + e.message;
