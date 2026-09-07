@@ -1383,11 +1383,8 @@ function listenTeam() {
         const usersSnap = await db.collection('users').where('active', '==', true).get();
         if (usersSnap.empty) { el.innerHTML = '<div class="empty-state">Aucun membre enregistré</div>'; return; }
 
-        // Recalculer les soldes uniquement si cache vieux de plus de 10 secondes
-        const cacheAge = Date.now() - employeesSoldeLastUpdate;
-        if (cacheAge > 10000 || Object.keys(employeesSolde).length === 0) {
-          await computeAllSoldes();
-        }
+        // Toujours recalculer les soldes pour garantir la cohérence
+        await computeAllSoldes();
 
         const members = usersSnap.docs.map(d => {
           const user = d.data();
