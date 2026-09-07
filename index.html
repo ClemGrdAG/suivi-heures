@@ -3016,11 +3016,14 @@ function updateSoldePreview() {
 document.getElementById('solde-save').addEventListener('click', async () => {
   const val = parseFloat(document.getElementById('solde-input').value) || 0;
   const startDate = document.getElementById('solde-start-date').value || '2025-04-13';
+  console.log('Saving solde:', currentSoldeUid, 'val:', val, 'startDate:', startDate);
+  if (!currentSoldeUid) { alert('Erreur : aucun salarié sélectionné.'); return; }
   try {
     await db.collection('users').doc(currentSoldeUid).update({
       soldeInitial: val,
       startDate: startDate
     });
+    console.log('Saved OK');
     // Si c'est le salarié connecté, recharger son profil UP
     if (CU && currentSoldeUid === CU.uid) {
       await loadProfile();
@@ -3032,7 +3035,11 @@ document.getElementById('solde-save').addEventListener('click', async () => {
       await renderWeeklyRecap();
     }
     closeModal();
-  } catch(e) { alert('Erreur : ' + e.message); }
+    alert('✓ Solde et date de début enregistrés pour ' + currentSoldeUid);
+  } catch(e) {
+    console.error('Erreur solde-save:', e);
+    alert('Erreur : ' + e.message);
+  }
 });
 
 // =============================================
