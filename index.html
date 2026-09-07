@@ -1386,8 +1386,11 @@ function listenTeam() {
         const usersSnap = await db.collection('users').where('active', '==', true).get();
         if (usersSnap.empty) { el.innerHTML = '<div class="empty-state">Aucun membre enregistré</div>'; teamIsComputing = false; return; }
 
-        employeesSolde = {};
-        await computeAllSoldes();
+        // Attendre que employeesSolde soit calculé (par listenEmployees)
+        // Si vide, lancer le calcul
+        if (Object.keys(employeesSolde).length === 0) {
+          await computeAllSoldes();
+        }
 
         const members = usersSnap.docs.map(d => {
           const user = d.data();
@@ -1923,15 +1926,7 @@ async function updateAdminStats() {
 let employeesSolde = {};
 let employeesSoldeLastUpdate = 0; // timestamp du dernier calcul
 
-let _computeRunning = false;
-let _computePending = false;
 async function computeAllSoldes() {
-  if (_computeRunning) {
-    _computePending = true;
-    return;
-  }
-  _computeRunning = true;
-  _computePending = false;
   const now = new Date();
   const day = now.getDay() || 7;
   const thisMon = new Date(now);
@@ -2043,8 +2038,6 @@ async function computeAllSoldes() {
     employeesSoldeLastUpdate = Date.now();
 
   } catch(e) { console.error(e); }
-  _computeRunning = false;
-  if (_computePending) await computeAllSoldes();
 }
 
 function listenEmployees() {
