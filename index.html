@@ -1653,8 +1653,8 @@ async function renderWeeklyRecap() {
     thisMon.setDate(now.getDate() - day + 1);
     thisMon.setHours(0,0,0,0);
 
-    // Date de départ du calcul
-    const startDateStr = userSnap.exists ? (userSnap.data().startDate || '2025-04-13') : '2025-04-13';
+    // Date de départ du calcul — relire depuis Firebase pour avoir la valeur à jour
+    const startDateStr = (userSnap.exists ? userSnap.data().startDate : null) || UP?.startDate || '2025-04-13';
     const START_DATE = new Date(startDateStr + 'T00:00:00');
     const startDateFr = new Date(startDateStr + 'T12:00:00').toLocaleDateString('fr-FR', {day:'2-digit', month:'2-digit', year:'numeric'});
 
@@ -2992,7 +2992,7 @@ let currentSoldeUid = null;
 
 window.openSoldeModal = async (uid, name, current) => {
   currentSoldeUid = uid;
-  document.getElementById('modal-solde-title').textContent = name + ' — Solde &amp; date de début';
+  document.getElementById('modal-solde-title').textContent = name + ' — Solde & date de début';
   document.getElementById('solde-input').value = current || 0;
   // Charger la date de début personnalisée si elle existe
   try {
@@ -3021,8 +3021,16 @@ document.getElementById('solde-save').addEventListener('click', async () => {
       soldeInitial: val,
       startDate: startDate
     });
+    // Si c'est le salarié connecté, recharger son profil UP
+    if (CU && currentSoldeUid === CU.uid) {
+      await loadProfile();
+    }
     employeesSoldeLastUpdate = 0; // forcer recalcul
     await computeAllSoldes();
+    // Forcer le recalcul du profil salarié si connecté
+    if (CU && currentSoldeUid === CU.uid) {
+      await renderWeeklyRecap();
+    }
     closeModal();
   } catch(e) { alert('Erreur : ' + e.message); }
 });
