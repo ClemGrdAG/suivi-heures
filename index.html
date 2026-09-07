@@ -1373,7 +1373,10 @@ function listenTeam() {
   try {
     if (isAdmin) {
       // Admin : croiser users + badges + solde pour afficher tout le monde
+      let teamIsComputing = false;
       unsubTeam = db.collection('badges').onSnapshot(async snap => {
+        if (teamIsComputing) return; // éviter les appels simultanés
+        teamIsComputing = true;
         const el = document.getElementById('team-list');
         el.innerHTML = '<div class="loader">Calcul des soldes...</div>';
         const badgesMap = {};
@@ -1381,7 +1384,7 @@ function listenTeam() {
 
         // Récupérer tous les utilisateurs actifs
         const usersSnap = await db.collection('users').where('active', '==', true).get();
-        if (usersSnap.empty) { el.innerHTML = '<div class="empty-state">Aucun membre enregistré</div>'; return; }
+        if (usersSnap.empty) { el.innerHTML = '<div class="empty-state">Aucun membre enregistré</div>'; teamIsComputing = false; return; }
 
         employeesSolde = {};
         await computeAllSoldes();
@@ -1400,6 +1403,7 @@ function listenTeam() {
           };
         });
 
+        teamIsComputing = false;
         members.sort((a,b) => (b.active?1:0)-(a.active?1:0) || a.name.localeCompare(b.name));
         el.innerHTML = members.map(m => {
           const ini = m.name.split(' ').map(n=>n[0]).join('').toUpperCase().slice(0,2);
@@ -1446,6 +1450,7 @@ function listenTeam() {
           };
         });
 
+        teamIsComputing = false;
         members.sort((a,b) => (b.active?1:0)-(a.active?1:0) || a.name.localeCompare(b.name));
         el.innerHTML = members.map(m => {
           const ini = m.name.split(' ').map(n=>n[0]).join('').toUpperCase().slice(0,2);
