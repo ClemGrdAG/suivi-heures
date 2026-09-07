@@ -538,9 +538,11 @@ input:focus, select:focus { outline: none; border-color: var(--ag-gold); backgro
   <!-- Modal solde initial -->
   <div class="modal-overlay" id="modal-solde" style="display:none">
     <div class="modal">
-      <h3 id="modal-solde-title">Solde initial</h3>
-      <p style="font-size:13px;color:#666;margin-bottom:1rem;">Saisissez le solde d'heures accumulé avant le 13/04/2025. Utilisez un nombre négatif si le salarié est en déficit.</p>
-      <label style="font-size:13px;color:#666;display:block;margin-bottom:4px">Solde en heures (ex: 3.5 pour +3h30, -2 pour -2h00)</label>
+      <h3 id="modal-solde-title">Solde initial &amp; date de début</h3>
+      <label style="font-size:13px;color:#666;display:block;margin-bottom:4px">Date de début du calcul</label>
+      <input type="date" id="solde-start-date" style="margin-bottom:4px" />
+      <div style="font-size:11px;color:#aaa;margin-bottom:12px;">Par défaut : 13/04/2025. Modifiez uniquement si ce salarié a commencé à badger plus tard.</div>
+      <label style="font-size:13px;color:#666;display:block;margin-bottom:4px">Solde initial à cette date (ex: 3.5 pour +3h30, -2 pour -2h00)</label>
       <input type="number" id="solde-input" step="0.25" placeholder="0" style="margin-bottom:8px" />
       <div style="font-size:12px;color:#aaa;margin-bottom:12px;" id="solde-preview"></div>
       <div class="modal-actions">
@@ -1381,8 +1383,11 @@ function listenTeam() {
         const usersSnap = await db.collection('users').where('active', '==', true).get();
         if (usersSnap.empty) { el.innerHTML = '<div class="empty-state">Aucun membre enregistré</div>'; return; }
 
-        // Recalculer les soldes à chaque mise à jour (attendre la fin)
-        await computeAllSoldes();
+        // Recalculer les soldes uniquement si cache vieux de plus de 10 secondes
+        const cacheAge = Date.now() - employeesSoldeLastUpdate;
+        if (cacheAge > 10000 || Object.keys(employeesSolde).length === 0) {
+          await computeAllSoldes();
+        }
 
         const members = usersSnap.docs.map(d => {
           const user = d.data();
@@ -1648,8 +1653,10 @@ async function renderWeeklyRecap() {
     thisMon.setDate(now.getDate() - day + 1);
     thisMon.setHours(0,0,0,0);
 
-    // Date de départ du calcul : lundi 13 avril 2025
-    const START_DATE = new Date('2025-04-13T00:00:00');
+    // Date de départ du calcul : personnalisée ou 13/04/2025 par défaut
+    const startDateStr = UP?.startDate || '2025-04-13';
+    const START_DATE = new Date(startDateStr + 'T00:00:00');
+    const startDateFr = START_DATE.toLocaleDateString('fr-FR', {day:'2-digit', month:'2-digit', year:'numeric'});
 
     // Récupérer les pointages depuis la date de départ
     const snap = await db.collection('pointages')
@@ -1667,7 +1674,8 @@ async function renderWeeklyRecap() {
       const mon = new Date(d);
       mon.setDate(d.getDate() - wd + 1);
       mon.setHours(12,0,0,0);
-      if (mon < START_DATE) return; // ignorer les semaines avant le 13 avril
+      const userStartDate = new Date((userContracts[e.userId + '_start'] || DEFAULT_START) + 'T00:00:00');
+      if (mon < userStartDate) return; // ignorer les semaines avant le 13 avril
       const key = mon.getFullYear()+'-'+String(mon.getMonth()+1).padStart(2,'0')+'-'+String(mon.getDate()).padStart(2,'0');
       if (!weeks[key]) weeks[key] = { mon, total: 0, days: new Set() };
       weeks[key].total += e.duration;
@@ -1749,7 +1757,7 @@ async function renderWeeklyRecap() {
       const paiementsStr = paiementsHS > 0
         ? ' · <span id="paiements-toggle" style="cursor:pointer;text-decoration:underline dotted;color:#A32D2D;" title="Cliquez pour voir le détail">HS payées : −' + formatDuration(paiementsHS) + '</span>'
         : '';
-      soldeDetail.innerHTML = 'Depuis le 13/04/2025 · ' + nbSemaines + ' semaine' + (nbSemaines > 1 ? 's' : '') + soldeInitialStr + recupStr + paiementsStr;
+      soldeDetail.innerHTML = 'Depuis le ' + startDateFr + ' · ' + nbSemaines + ' semaine' + (nbSemaines > 1 ? 's' : '') + soldeInitialStr + recupStr + paiementsStr;
 
       // Ajouter/supprimer le détail des récups au clic
       const recupToggle = document.getElementById('recup-toggle');
@@ -1912,6 +1920,7 @@ async function updateAdminStats() {
 // ADMIN — EMPLOYÉS
 // =============================================
 let employeesSolde = {};
+let employeesSoldeLastUpdate = 0; // timestamp du dernier calcul
 
 async function computeAllSoldes() {
   const now = new Date();
@@ -1920,12 +1929,12 @@ async function computeAllSoldes() {
   thisMon.setDate(now.getDate() - day + 1);
   thisMon.setHours(12,0,0,0);
   const thisWeekKey = thisMon.getFullYear()+'-'+String(thisMon.getMonth()+1).padStart(2,'0')+'-'+String(thisMon.getDate()).padStart(2,'0');
-  const START_DATE = new Date('2025-04-13T00:00:00');
+  const DEFAULT_START = '2025-04-13';
 
   try {
-    // Récupérer tous les pointages depuis le 13 avril
+    // Récupérer tous les pointages depuis la date de départ
     const snap = await db.collection('pointages')
-      .where('endTime', '>=', START_DATE.toISOString())
+      .where('endTime', '>=', new Date(DEFAULT_START + 'T00:00:00').toISOString())
       .get();
     const byUser = {};
     snap.docs.forEach(d => {
@@ -1937,7 +1946,8 @@ async function computeAllSoldes() {
       const mon = new Date(dt);
       mon.setDate(dt.getDate() - wd + 1);
       mon.setHours(12,0,0,0);
-      if (mon < START_DATE) return;
+      const userStartDate = new Date((userContracts[e.userId + '_start'] || DEFAULT_START) + 'T00:00:00');
+      if (mon < userStartDate) return;
       const key = mon.getFullYear()+'-'+String(mon.getMonth()+1).padStart(2,'0')+'-'+String(mon.getDate()).padStart(2,'0');
       if (key === thisWeekKey) return;
       if (!byUser[e.userId][key]) byUser[e.userId][key] = 0;
@@ -1954,7 +1964,10 @@ async function computeAllSoldes() {
     employeesSolde = {};
     // Map uid -> contrat
     const userContracts = {};
-    usersSnap.docs.forEach(d => { userContracts[d.id] = d.data().contrat || 'c1'; });
+    usersSnap.docs.forEach(d => {
+      userContracts[d.id] = d.data().contrat || 'c1';
+      userContracts[d.id + '_start'] = d.data().startDate || DEFAULT_START;
+    });
 
     Object.entries(byUser).forEach(([uid, weekData]) => {
       const base = soldesInitiaux[uid] || 0;
@@ -2023,6 +2036,7 @@ async function computeAllSoldes() {
       if (employeesSolde[p.userId] === undefined) employeesSolde[p.userId] = soldesInitiaux[p.userId] || 0;
       employeesSolde[p.userId] -= (p.hours || 0);
     });
+    employeesSoldeLastUpdate = Date.now();
 
   } catch(e) { console.error(e); }
 }
@@ -2969,6 +2983,7 @@ document.getElementById('hs-save').addEventListener('click', async () => {
       createdBy: CU.email
     });
     closeModal();
+    employeesSoldeLastUpdate = 0; // forcer recalcul complet
     await computeAllSoldes();
     alert('✓ ' + formatDuration(hours) + ' déduits du compteur avec succès.');
   } catch(e) {
@@ -2981,10 +2996,18 @@ document.getElementById('hs-save').addEventListener('click', async () => {
 // =============================================
 let currentSoldeUid = null;
 
-window.openSoldeModal = (uid, name, current) => {
+window.openSoldeModal = async (uid, name, current) => {
   currentSoldeUid = uid;
-  document.getElementById('modal-solde-title').textContent = 'Solde initial — ' + name;
+  document.getElementById('modal-solde-title').textContent = name + ' — Solde &amp; date de début';
   document.getElementById('solde-input').value = current || 0;
+  // Charger la date de début personnalisée si elle existe
+  try {
+    const snap = await db.collection('users').doc(uid).get();
+    const startDate = snap.data()?.startDate || '2025-04-13';
+    document.getElementById('solde-start-date').value = startDate;
+  } catch(e) {
+    document.getElementById('solde-start-date').value = '2025-04-13';
+  }
   updateSoldePreview();
   document.getElementById('modal-solde').style.display = 'flex';
 };
@@ -2998,8 +3021,13 @@ function updateSoldePreview() {
 
 document.getElementById('solde-save').addEventListener('click', async () => {
   const val = parseFloat(document.getElementById('solde-input').value) || 0;
+  const startDate = document.getElementById('solde-start-date').value || '2025-04-13';
   try {
-    await db.collection('users').doc(currentSoldeUid).update({ soldeInitial: val });
+    await db.collection('users').doc(currentSoldeUid).update({
+      soldeInitial: val,
+      startDate: startDate
+    });
+    employeesSoldeLastUpdate = 0; // forcer recalcul
     await computeAllSoldes();
     closeModal();
   } catch(e) { alert('Erreur : ' + e.message); }
