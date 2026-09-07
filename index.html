@@ -1653,10 +1653,10 @@ async function renderWeeklyRecap() {
     thisMon.setDate(now.getDate() - day + 1);
     thisMon.setHours(0,0,0,0);
 
-    // Date de départ du calcul : personnalisée ou 13/04/2025 par défaut
+    // Date de départ du calcul
     const startDateStr = userSnap.exists ? (userSnap.data().startDate || '2025-04-13') : '2025-04-13';
     const START_DATE = new Date(startDateStr + 'T00:00:00');
-    const startDateFr = START_DATE.toLocaleDateString('fr-FR', {day:'2-digit', month:'2-digit', year:'numeric'});
+    const startDateFr = new Date(startDateStr + 'T12:00:00').toLocaleDateString('fr-FR', {day:'2-digit', month:'2-digit', year:'numeric'});
 
     // Récupérer les pointages depuis la date de départ
     const snap = await db.collection('pointages')
@@ -1674,8 +1674,7 @@ async function renderWeeklyRecap() {
       const mon = new Date(d);
       mon.setDate(d.getDate() - wd + 1);
       mon.setHours(12,0,0,0);
-      const userStartDate = new Date((userContracts[e.userId + '_start'] || DEFAULT_START) + 'T00:00:00');
-      if (mon < userStartDate) return; // ignorer les semaines avant le 13 avril
+      if (mon < START_DATE) return; // ignorer les semaines avant la date de début
       const key = mon.getFullYear()+'-'+String(mon.getMonth()+1).padStart(2,'0')+'-'+String(mon.getDate()).padStart(2,'0');
       if (!weeks[key]) weeks[key] = { mon, total: 0, days: new Set() };
       weeks[key].total += e.duration;
@@ -1933,11 +1932,8 @@ async function computeAllSoldes() {
 
   try {
     // Récupérer tous les pointages depuis la date de départ
-    // Utiliser la date la plus ancienne parmi tous les salariés
-    const minStart = new Date('2020-01-01T00:00:00');
-    const snap = await db.collection('pointages')
-      .where('endTime', '>=', minStart.toISOString())
-      .get();
+    // Récupérer tous les pointages (filtre par userId appliqué côté JS)
+    const snap = await db.collection('pointages').get();
     const byUser = {};
     snap.docs.forEach(d => {
       const e = d.data();
