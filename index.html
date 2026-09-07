@@ -1931,8 +1931,17 @@ async function computeAllSoldes() {
   const DEFAULT_START = '2025-04-13';
 
   try {
-    // Récupérer tous les pointages depuis la date de départ
-    // Récupérer tous les pointages (filtre par userId appliqué côté JS)
+    // Charger d'abord les users pour avoir les startDates et contrats
+    const usersSnap = await db.collection('users').get();
+    const soldesInitiaux = {};
+    const userContracts = {};
+    usersSnap.docs.forEach(d => {
+      soldesInitiaux[d.id] = d.data().soldeInitial || 0;
+      userContracts[d.id] = d.data().contrat || 'c1';
+      userContracts[d.id + '_start'] = d.data().startDate || DEFAULT_START;
+    });
+
+    // Récupérer tous les pointages
     const snap = await db.collection('pointages').get();
     const byUser = {};
     snap.docs.forEach(d => {
@@ -1952,20 +1961,7 @@ async function computeAllSoldes() {
       byUser[e.userId][key] += e.duration;
     });
 
-    // Récupérer les soldes initiaux de tous les users
-    const usersSnap = await db.collection('users').get();
-    const soldesInitiaux = {};
-    usersSnap.docs.forEach(d => {
-      soldesInitiaux[d.id] = d.data().soldeInitial || 0;
-    });
-
     employeesSolde = {};
-    // Map uid -> contrat
-    const userContracts = {};
-    usersSnap.docs.forEach(d => {
-      userContracts[d.id] = d.data().contrat || 'c1';
-      userContracts[d.id + '_start'] = d.data().startDate || DEFAULT_START;
-    });
 
     Object.entries(byUser).forEach(([uid, weekData]) => {
       const base = soldesInitiaux[uid] || 0;
