@@ -1606,7 +1606,10 @@ async function renderWeeklyRecap() {
     thisMon.setDate(now.getDate() - day + 1);
     thisMon.setHours(0,0,0,0);
 
-    // Date de départ du calcul — relire depuis Firebase pour avoir la valeur à jour
+    // Charger le profil utilisateur depuis Firebase (startDate + soldeInitial)
+    const userSnap = await db.collection('users').doc(CU.uid).get();
+
+    // Date de départ du calcul
     const startDateStr = (userSnap.exists ? userSnap.data().startDate : null) || UP?.startDate || '2025-04-13';
     const START_DATE = new Date(startDateStr + 'T00:00:00');
     const startDateFr = new Date(startDateStr + 'T12:00:00').toLocaleDateString('fr-FR', {day:'2-digit', month:'2-digit', year:'numeric'});
@@ -1637,8 +1640,7 @@ async function renderWeeklyRecap() {
     const thisWeekKey = thisMon.getFullYear()+'-'+String(thisMon.getMonth()+1).padStart(2,'0')+'-'+String(thisMon.getDate()).padStart(2,'0');
     const sorted = Object.entries(weeks).sort((a,b) => b[0].localeCompare(a[0]));
 
-    // Récupérer le solde initial depuis Firebase
-    const userSnap = await db.collection('users').doc(CU.uid).get();
+    // Récupérer le solde initial depuis Firebase (userSnap déjà chargé)
     const soldeInitial = userSnap.exists ? (userSnap.data().soldeInitial || 0) : 0;
 
     // Récupérer TOUS les congés validés pour ajuster l'objectif hebdomadaire
